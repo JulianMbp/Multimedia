@@ -6,6 +6,7 @@ import ToyCarLoader from '../../loaders/ToyCarLoader.js'
 import AmbientSound from './AmbientSound.js'
 import Cheese from './Cheese.js'
 import CheeseParticles from './CheeseParticles.js'
+import Enemy from './Enemy.js'
 import Environment from './Environment.js'
 import Floor from './Floor.js'
 import Fox from './Fox.js'
@@ -32,7 +33,7 @@ export default class World {
 
         // Sistema de quesos
         this.cheeses = []
-        this.maxCheeses = 2 // Reducido a 2 para pruebas
+        this.maxCheeses = 10 // 10 quesos por nivel
         this.cheesesCollected = 0
         this.cheeseModel = null
         this.cheeseParticles = null
@@ -43,6 +44,11 @@ export default class World {
         this.currentLevel = 1
         this.level2Buildings = [] // Array para guardar los edificios del nivel 2
         this.level3Buildings = [] // Array para guardar los edificios del nivel 3
+        
+        // Sistema de enemigos
+        this.enemies = [] // Array para guardar los enemigos
+        this.enemyModels = [] // Array con los recursos de modelos de enemigos disponibles
+        this.gameOver = false // Flag para controlar si el juego ha terminado
 
         // Permitimos recoger premios tras 2s
         setTimeout(() => {
@@ -96,6 +102,9 @@ export default class World {
             
             // Crear contador de quesos en el HUD
             this.createCheeseCounter()
+            
+            // 👾 Inicializar sistema de enemigos
+            this.initializeEnemies()
 
             this.experience.tracker.showCancelButton()
             //Registrando experiencia VR con el robot
@@ -123,6 +132,11 @@ export default class World {
     }
 
     update(delta) {
+        // Si el juego ha terminado, no actualizar nada
+        if (this.gameOver) {
+            return
+        }
+        
         // Actualiza personajes y cámara
         this.fox?.update()
         this.robot?.update()
@@ -136,6 +150,21 @@ export default class World {
         
         // Actualiza quesos
         this.cheeses?.forEach(c => c.update(delta))
+        
+        // Actualizar enemigos
+        if (this.enemies && this.enemies.length > 0 && this.robot) {
+            this.enemies.forEach(enemy => {
+                if (enemy) {
+                    enemy.setTarget(this.robot)
+                    enemy.update()
+                    
+                    // Verificar colisión con el jugador
+                    if (enemy.checkCollisionWithTarget()) {
+                        this.onEnemyCollision()
+                    }
+                }
+            })
+        }
         
         // Actualizar partículas del queso
         if (this.cheeseParticles && this.robot && this.cheeses.length > 0) {
@@ -613,6 +642,9 @@ export default class World {
         this.cheesesCollected = 0
         this.updateCheeseCounter()
         
+        // Limpiar enemigos del nivel 1
+        this.clearEnemies()
+        
         // Teletransportar al jugador a una posición central del nivel 2
         if (this.robot && this.robot.body) {
             this.robot.body.position.set(0, 1, 0)
@@ -623,10 +655,15 @@ export default class World {
         // Generar edificios del nivel 2
         this.generateLevel2Buildings()
         
+        // Regenerar enemigos para el nivel 2
+        setTimeout(() => {
+            this.generateEnemies()
+        }, 1500)
+        
         // Generar el primer queso del nivel 2
         setTimeout(() => {
             this.generateCheese()
-        }, 1000)
+        }, 2000)
         
         console.log('✅ Nivel 2 iniciado')
     }
@@ -1052,6 +1089,9 @@ export default class World {
         this.cheesesCollected = 0
         this.updateCheeseCounter()
         
+        // Limpiar enemigos del nivel 2
+        this.clearEnemies()
+        
         // Teletransportar al jugador a una posición central del nivel 3
         if (this.robot && this.robot.body) {
             this.robot.body.position.set(0, 1, 0)
@@ -1062,10 +1102,15 @@ export default class World {
         // Generar edificios del nivel 3
         this.generateLevel3Buildings()
         
+        // Regenerar enemigos para el nivel 3
+        setTimeout(() => {
+            this.generateEnemies()
+        }, 1500)
+        
         // Generar el primer queso del nivel 3
         setTimeout(() => {
             this.generateCheese()
-        }, 1000)
+        }, 2000)
         
         console.log('✅ Nivel 3 iniciado')
     }
@@ -1464,6 +1509,225 @@ export default class World {
         })
         this.portal.activate()
         console.log('🌀 Portal creado en:', portalPosition)
+    }
+    
+    initializeEnemies() {
+        // Obtener modelos de enemigos disponibles
+        const enemyModelNames = [
+            'enemyFastRun',
+            'enemyMutantWalking',
+            'enemyWalk',
+            'enemyWalking',
+            'enemyWheelbarrowWalk'
+        ]
+        
+        this.enemyModels = []
+        enemyModelNames.forEach(modelName => {
+            if (this.resources.items[modelName]) {
+                this.enemyModels.push(this.resources.items[modelName])
+                console.log(`✅ Modelo de enemigo ${modelName} cargado`)
+            } else {
+                console.warn(`⚠️ Modelo de enemigo ${modelName} no encontrado`)
+            }
+        })
+        
+        if (this.enemyModels.length === 0) {
+            console.warn('⚠️ No se encontraron modelos de enemigos')
+            return
+        }
+        
+        console.log(`👾 ${this.enemyModels.length} modelos de enemigos disponibles`)
+        
+        // Generar enemigos después de un pequeño delay
+        setTimeout(() => {
+            this.generateEnemies()
+        }, 2000)
+    }
+    
+    generateEnemies() {
+        if (!this.robot || !this.robot.body || this.enemyModels.length === 0) {
+            console.warn('⚠️ No se pueden generar enemigos: robot o modelos no disponibles')
+            return
+        }
+        
+        // Limpiar enemigos existentes
+        this.clearEnemies()
+        
+        // Número de enemigos a generar (puedes ajustar esto)
+        const numberOfEnemies = 5 + this.currentLevel * 2 // Más enemigos en niveles superiores
+        
+        const robotPos = this.robot.body.position
+        const spawnDistance = 100 // Distancia de 100 metros
+        
+        console.log(`👾 Generando ${numberOfEnemies} enemigos a ${spawnDistance} metros del jugador...`)
+        
+        for (let i = 0; i < numberOfEnemies; i++) {
+            // Generar posición aleatoria alrededor del jugador a 100 metros
+            const angle = Math.random() * Math.PI * 2
+            const x = robotPos.x + Math.cos(angle) * spawnDistance
+            const z = robotPos.z + Math.sin(angle) * spawnDistance
+            const y = 1 // Altura del suelo
+            
+            // Seleccionar modelo aleatorio
+            const randomModel = this.enemyModels[Math.floor(Math.random() * this.enemyModels.length)]
+            
+            try {
+                // Crear nuevo enemigo
+                const enemy = new Enemy(this.experience, randomModel, { x, y, z })
+                enemy.setTarget(this.robot)
+                this.enemies.push(enemy)
+                
+                console.log(`👾 Enemigo ${i + 1} creado en (${x.toFixed(1)}, ${z.toFixed(1)})`)
+            } catch (error) {
+                console.error(`❌ Error al crear enemigo ${i + 1}:`, error)
+            }
+        }
+        
+        console.log(`✅ ${this.enemies.length} enemigos generados exitosamente`)
+    }
+    
+    clearEnemies() {
+        this.enemies.forEach(enemy => {
+            if (enemy) {
+                enemy.remove()
+            }
+        })
+        this.enemies = []
+    }
+    
+    onEnemyCollision() {
+        if (this.gameOver) return // Evitar múltiples llamadas
+        
+        console.log('💀 ¡Colisión con enemigo! El juego ha terminado')
+        this.gameOver = true
+        
+        // Detener movimiento del robot
+        if (this.robot && this.robot.body) {
+            this.robot.body.velocity.set(0, 0, 0)
+            this.robot.body.angularVelocity.set(0, 0, 0)
+        }
+        
+        // Mostrar mensaje de game over
+        const gameOverModal = document.createElement('div')
+        gameOverModal.innerHTML = `
+            <div style="
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: rgba(0, 0, 0, 0.95);
+                padding: 40px;
+                border-radius: 12px;
+                color: #fff;
+                z-index: 10001;
+                text-align: center;
+                font-family: sans-serif;
+                box-shadow: 0 0 30px rgba(255, 0, 0, 0.5);
+                border: 2px solid #ff0000;
+            ">
+                <h2 style="font-size: 32px; margin-bottom: 20px; color: #ff0000;">💀 ¡GAME OVER!</h2>
+                <p style="font-size: 18px; margin-bottom: 30px;">Un enemigo te ha atrapado</p>
+                <button id="restart-game-btn" style="
+                    padding: 12px 24px;
+                    font-size: 16px;
+                    background: #ff0000;
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    font-weight: bold;
+                ">🔄 Reiniciar Juego</button>
+            </div>
+        `
+        document.body.appendChild(gameOverModal)
+        
+        // Botón de reinicio
+        const restartBtn = document.getElementById('restart-game-btn')
+        restartBtn.addEventListener('click', () => {
+            gameOverModal.remove()
+            this.restartGame()
+        })
+    }
+    
+    restartGame() {
+        console.log('🔄 Reiniciando juego...')
+        
+        // Limpiar enemigos
+        this.clearEnemies()
+        
+        // Limpiar quesos
+        this.cheeses.forEach(cheese => {
+            if (cheese.pivot) {
+                cheese.collect()
+            }
+        })
+        this.cheeses = []
+        
+        // Remover partículas
+        if (this.cheeseParticles) {
+            this.cheeseParticles.remove()
+            this.cheeseParticles = null
+        }
+        
+        // Remover portal si existe
+        if (this.portal && this.portal.group) {
+            this.scene.remove(this.portal.group)
+            this.portal = null
+        }
+        
+        // Resetear estado del juego
+        this.gameOver = false
+        this.currentLevel = 1
+        this.cheesesCollected = 0
+        this.updateCheeseCounter()
+        
+        // Remover edificios de niveles superiores
+        if (this.level2Buildings && this.level2Buildings.length > 0) {
+            this.level2Buildings.forEach(building => {
+                if (building && building.parent) {
+                    this.scene.remove(building)
+                }
+            })
+            this.level2Buildings = []
+        }
+        
+        if (this.level3Buildings && this.level3Buildings.length > 0) {
+            this.level3Buildings.forEach(building => {
+                if (building && building.parent) {
+                    this.scene.remove(building)
+                }
+            })
+            this.level3Buildings = []
+        }
+        
+        // Si no hay vía (porque estábamos en nivel 2 o 3), recrearla
+        if (!this.road) {
+            const buildingPositions = this.loader?.getBuildingPositions?.() || []
+            if (buildingPositions.length > 0) {
+                this.road = new Road(this.experience, buildingPositions)
+                console.log('🛣️ Vía del nivel 1 recreada')
+            }
+        }
+        
+        // Resetear posición del robot
+        if (this.robot && this.robot.body) {
+            this.robot.body.position.set(0, 1, 0)
+            this.robot.body.velocity.set(0, 0, 0)
+            this.robot.body.angularVelocity.set(0, 0, 0)
+            this.spawnPosition.set(0, 0, 0)
+        }
+        
+        // Regenerar enemigos después de un delay
+        setTimeout(() => {
+            this.generateEnemies()
+        }, 1000)
+        
+        // Regenerar primer queso después de un delay
+        setTimeout(() => {
+            this.generateCheese()
+        }, 1500)
+        
+        console.log('✅ Juego reiniciado')
     }
 
 }

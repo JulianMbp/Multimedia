@@ -36,6 +36,32 @@ export default [
         type: 'gltfModel',
         path: '/models/cheese/cheese_wedge.glb'
     },
+    // Modelos de enemigos
+    {
+        name: 'enemyFastRun',
+        type: 'fbxModel',
+        path: '/models/enemigos/Fast Run.fbx'
+    },
+    {
+        name: 'enemyMutantWalking',
+        type: 'fbxModel',
+        path: '/models/enemigos/Mutant Walking.fbx'
+    },
+    {
+        name: 'enemyWalk',
+        type: 'fbxModel',
+        path: '/models/enemigos/Walk.fbx'
+    },
+    {
+        name: 'enemyWalking',
+        type: 'fbxModel',
+        path: '/models/enemigos/Walking.fbx'
+    },
+    {
+        name: 'enemyWheelbarrowWalk',
+        type: 'fbxModel',
+        path: '/models/enemigos/Wheelbarrow Walk.fbx'
+    },
     // Modelos del mundo 2
     {
         name: 'ancient_building',
