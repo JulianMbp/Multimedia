@@ -93,7 +93,7 @@ export default class CircularMenu {
       this.actionButtons.push(btn)
     })
 
-    // HUD: Tiempo
+    // HUD: Tiempo - OCULTO
     this.timer = document.createElement('div')
     this.timer.id = 'hud-timer'
     this.timer.innerText = '⏱ 0s'
@@ -109,11 +109,12 @@ export default class CircularMenu {
       borderRadius: '8px',
       zIndex: 9999,
       fontFamily: 'monospace',
-      pointerEvents: 'none'
+      pointerEvents: 'none',
+      display: 'none' // OCULTO
     })
     document.body.appendChild(this.timer)
 
-    // HUD: Puntos
+    // HUD: Puntos - OCULTO
     this.status = document.createElement('div')
     this.status.id = 'hud-points'
     this.status.innerText = '🎖️ Puntos: 0'
@@ -129,10 +130,12 @@ export default class CircularMenu {
       borderRadius: '8px',
       zIndex: 9999,
       fontFamily: 'monospace',
-      pointerEvents: 'none'
+      pointerEvents: 'none',
+      display: 'none' // OCULTO
     })
     document.body.appendChild(this.status)
 
+    // HUD: Jugadores - OCULTO
     this.playersLabel = document.createElement('div')
     this.playersLabel.id = 'hud-players'
     this.playersLabel.innerText = '👥 Jugadores: 1'
@@ -148,7 +151,8 @@ export default class CircularMenu {
       borderRadius: '8px',
       zIndex: 9999,
       fontFamily: 'monospace',
-      pointerEvents: 'none'
+      pointerEvents: 'none',
+      display: 'none' // OCULTO
     })
     document.body.appendChild(this.playersLabel)
 
@@ -176,11 +180,12 @@ export default class CircularMenu {
     })
 
     this.aboutContainer.innerHTML = `
-          <h2 style="margin-bottom: 10px;">👨‍💻 Desarrollador</h2>
-          <p style="margin: 0;">Gustavo Sánchez Rodríguez</p>
+          <h2 style="margin-bottom: 10px;">Desarrollado por:</h2>
+          <p style="margin: 0;">Julian M. Bastidas Perez</p>
           <p style="margin: 0; font-size: 14px;">Universidad Cooperativa de Colombia</p>
           <p style="margin: 10px 0 0; font-size: 13px;">Proyecto interactivo educativo con Three.js</p>
-          <p style="margin: 10px 0 0; font-size: 13px;">guswillsan@gmail.com</p>
+          <p style="margin: 10px 0 0; font-size: 13px;">Proyecto Final de Programación Orientada a Entornos Multimediales</p>
+          <p style="margin: 10px 0 0; font-size: 13px;">julian.bastidas@campusucc.edu.co</p>
           <button style="
             margin-top: 12px;
             padding: 6px 14px;

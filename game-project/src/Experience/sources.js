@@ -36,6 +36,103 @@ export default [
         type: 'gltfModel',
         path: '/models/cheese/cheese_wedge.glb'
     },
+    // Modelos del mundo 2
+    {
+        name: 'ancient_building',
+        type: 'gltfModel',
+        path: '/models/world 2/ancient_building.glb'
+    },
+    {
+        name: 'desert_stone_house',
+        type: 'gltfModel',
+        path: '/models/world 2/desert_stone_house.glb'
+    },
+    {
+        name: 'fantasy_house',
+        type: 'gltfModel',
+        path: '/models/world 2/fantasy_house.glb'
+    },
+    {
+        name: 'old_castle',
+        type: 'gltfModel',
+        path: '/models/world 2/old_castle.glb'
+    },
+    {
+        name: 'old_castle_1',
+        type: 'gltfModel',
+        path: '/models/world 2/old_castle (1).glb'
+    },
+    {
+        name: 'old_house',
+        type: 'gltfModel',
+        path: '/models/world 2/old_house.glb'
+    },
+    {
+        name: 'old_house_1',
+        type: 'gltfModel',
+        path: '/models/world 2/old_house (1).glb'
+    },
+    {
+        name: 'stone_building',
+        type: 'gltfModel',
+        path: '/models/world 2/stone_building.glb'
+    },
+    // Modelos del mundo 3
+    {
+        name: 'pokemon_treecko_house',
+        type: 'gltfModel',
+        path: '/models/world 3/pokemon_treecko_house.glb'
+    },
+    {
+        name: 'pokemon_psyduck_house',
+        type: 'gltfModel',
+        path: '/models/world 3/pokemon_psyduck_house.glb'
+    },
+    {
+        name: 'pokemon_pikachu_house',
+        type: 'gltfModel',
+        path: '/models/world 3/pokemon_pikachu_house.glb'
+    },
+    {
+        name: 'mudkip_house',
+        type: 'gltfModel',
+        path: '/models/world 3/mudkip_house.glb'
+    },
+    {
+        name: 'meowth_house',
+        type: 'gltfModel',
+        path: '/models/world 3/meowth_house.glb'
+    },
+    {
+        name: 'machop_house',
+        type: 'gltfModel',
+        path: '/models/world 3/machop_house.glb'
+    },
+    {
+        name: 'cyndaquil_house',
+        type: 'gltfModel',
+        path: '/models/world 3/cyndaquil_house.glb'
+    },
+    {
+        name: 'cubone_house',
+        type: 'gltfModel',
+        path: '/models/world 3/cubone_house.glb'
+    },
+    {
+        name: 'chikorita_house',
+        type: 'gltfModel',
+        path: '/models/world 3/chikorita_house.glb'
+    },
+    {
+        name: 'charmander_house',
+        type: 'gltfModel',
+        path: '/models/world 3/charmander_house.glb'
+    },
+    {
+        name: 'bulbasaur_house',
+        type: 'gltfModel',
+        path: '/models/world 3/bulbasaur_house.glb'
+    },
     {
         "name": "building_001_001",
         "type": "gltfModel",

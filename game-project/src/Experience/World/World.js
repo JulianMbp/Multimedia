@@ -1,4 +1,5 @@
 
+import * as CANNON from 'cannon-es'
 import * as THREE from 'three'
 import MobileControls from '../../controls/MobileControls.js'
 import ToyCarLoader from '../../loaders/ToyCarLoader.js'
@@ -28,7 +29,7 @@ export default class World {
 
         this.allowPrizePickup = false
         this.hasMoved = false
-        
+
         // Sistema de quesos
         this.cheeses = []
         this.maxCheeses = 2 // Reducido a 2 para pruebas
@@ -37,6 +38,11 @@ export default class World {
         this.cheeseParticles = null
         this.portal = null
         this.spawnPosition = new THREE.Vector3(0, 0, 0) // Posición inicial del spawn
+        
+        // Sistema de niveles
+        this.currentLevel = 1
+        this.level2Buildings = [] // Array para guardar los edificios del nivel 2
+        this.level3Buildings = [] // Array para guardar los edificios del nivel 3
 
         // Permitimos recoger premios tras 2s
         setTimeout(() => {
@@ -53,19 +59,21 @@ export default class World {
             this.loader = new ToyCarLoader(this.experience)
             await this.loader.loadFromAPI()
             
-            // 🛣️ Crear vía después de cargar los edificios
-            const buildingPositions = this.loader.getBuildingPositions?.() || []
-            console.log(`🛣️ Creando vía con ${buildingPositions.length} posiciones de edificios`)
-            if (buildingPositions.length > 0) {
-                this.road = new Road(this.experience, buildingPositions)
-            } else {
-                console.warn('⚠️ No se encontraron posiciones de edificios para crear la vía')
+            // 🛣️ Crear vía después de cargar los edificios (solo en nivel 1)
+            if (this.currentLevel === 1) {
+                const buildingPositions = this.loader.getBuildingPositions?.() || []
+                console.log(`🛣️ Creando vía con ${buildingPositions.length} posiciones de edificios`)
+                if (buildingPositions.length > 0) {
+                    this.road = new Road(this.experience, buildingPositions)
+                } else {
+                    console.warn('⚠️ No se encontraron posiciones de edificios para crear la vía')
+                }
             }
 
             // 2️⃣ Personajes
             this.fox = new Fox(this.experience)
             this.robot = new Robot(this.experience)
-            
+
             // Guardar posición inicial del spawn (donde aparece el robot)
             if (this.robot && this.robot.body) {
                 this.spawnPosition.set(
@@ -203,7 +211,16 @@ export default class World {
                     
                     // Verificar si se completaron todos los quesos
                     if (this.cheesesCollected >= this.maxCheeses) {
-                        this.onAllCheesesCollected()
+                        if (this.currentLevel === 1) {
+                            // Nivel 1 completado - teletransportar al nivel 2
+                            this.startLevel2()
+                        } else if (this.currentLevel === 2) {
+                            // Nivel 2 completado - teletransportar al nivel 3
+                            this.startLevel3()
+                        } else if (this.currentLevel === 3) {
+                            // Nivel 3 completado - mostrar portal
+                            this.onAllCheesesCollected()
+                        }
                     } else {
                         // Generar un nuevo queso si no hemos alcanzado el máximo
                         setTimeout(() => {
@@ -227,7 +244,7 @@ export default class World {
         }
 
     }
-    
+
     generateCheese() {
         if (!this.cheeseModel || !this.robot || this.cheeses.length >= this.maxCheeses) {
             return
@@ -257,17 +274,83 @@ export default class World {
             
             // Obtener todos los meshes de edificios de la escena
             const buildingMeshes = []
-            this.scene.traverse((child) => {
-                // Buscar meshes que sean edificios (excluir suelo, vía, robot, zorro)
-                if (child instanceof THREE.Mesh && 
-                    child !== this.floor?.mesh && 
-                    child !== this.road?.mesh &&
-                    child.parent !== this.robot?.group &&
-                    child.parent !== this.robot?.model &&
-                    child.parent !== this.fox?.model) {
-                    buildingMeshes.push(child)
-                }
+            const excludedParents = new Set()
+            
+            // Agregar padres a excluir
+            if (this.robot?.group) excludedParents.add(this.robot.group)
+            if (this.robot?.model) excludedParents.add(this.robot.model)
+            if (this.fox?.model) excludedParents.add(this.fox.model)
+            if (this.portal?.group) excludedParents.add(this.portal.group)
+            
+            // Agregar quesos a excluir
+            this.cheeses.forEach(cheese => {
+                if (cheese.pivot) excludedParents.add(cheese.pivot)
             })
+            
+            // Seleccionar edificios según el nivel actual
+            if (this.currentLevel === 2) {
+                // Solo considerar edificios del nivel 2
+                if (this.level2Buildings && this.level2Buildings.length > 0) {
+                    this.level2Buildings.forEach(building => {
+                        building.traverse((child) => {
+                            if (child instanceof THREE.Mesh) {
+                                buildingMeshes.push(child)
+                            }
+                        })
+                    })
+                }
+            } else if (this.currentLevel === 3) {
+                // Solo considerar edificios del nivel 3
+                if (this.level3Buildings && this.level3Buildings.length > 0) {
+                    this.level3Buildings.forEach(building => {
+                        building.traverse((child) => {
+                            if (child instanceof THREE.Mesh) {
+                                buildingMeshes.push(child)
+                            }
+                        })
+                    })
+                }
+            } else if (this.currentLevel === 1) {
+                // En el nivel 1, usar los edificios del ToyCarLoader
+                // Crear un Set de edificios de otros niveles para verificación rápida
+                const otherLevelBuildingSet = new Set()
+                
+                // Agregar edificios del nivel 2
+                if (this.level2Buildings && this.level2Buildings.length > 0) {
+                    this.level2Buildings.forEach(building => {
+                        otherLevelBuildingSet.add(building)
+                        building.traverse((child) => {
+                            otherLevelBuildingSet.add(child)
+                            if (child.parent) otherLevelBuildingSet.add(child.parent)
+                        })
+                    })
+                }
+                
+                // Agregar edificios del nivel 3
+                if (this.level3Buildings && this.level3Buildings.length > 0) {
+                    this.level3Buildings.forEach(building => {
+                        otherLevelBuildingSet.add(building)
+                        building.traverse((child) => {
+                            otherLevelBuildingSet.add(child)
+                            if (child.parent) otherLevelBuildingSet.add(child.parent)
+                        })
+                    })
+                }
+                
+                // Recorrer la escena buscando edificios del nivel 1
+                this.scene.traverse((child) => {
+                    // Buscar meshes que sean edificios (excluir suelo, vía, robot, zorro, portal, quesos, otros niveles)
+                    if (child instanceof THREE.Mesh && 
+                        child !== this.floor?.mesh && 
+                        child !== this.road?.mesh &&
+                        !excludedParents.has(child.parent) &&
+                        !excludedParents.has(child.parent?.parent) &&
+                        !otherLevelBuildingSet.has(child) &&
+                        !otherLevelBuildingSet.has(child.parent)) {
+                        buildingMeshes.push(child)
+                    }
+                })
+            }
             
             // Verificar intersecciones con edificios
             const intersects = raycaster.intersectObjects(buildingMeshes, true)
@@ -346,12 +429,75 @@ export default class World {
             pointerEvents: 'none'
         })
         document.body.appendChild(this.cheeseCounter)
+        
+        // Crear botón para saltar al nivel 2 (solo visible en nivel 1)
+        this.skipToLevel2Button = document.createElement('button')
+        this.skipToLevel2Button.id = 'skip-level2-button'
+        this.skipToLevel2Button.innerText = '⏩ Saltar al Nivel 2'
+        Object.assign(this.skipToLevel2Button.style, {
+            position: 'fixed',
+            top: '60px',
+            left: '20px',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            background: 'rgba(255, 165, 0, 0.8)',
+            color: 'white',
+            padding: '8px 16px',
+            borderRadius: '8px',
+            border: 'none',
+            cursor: 'pointer',
+            zIndex: 10000,
+            fontFamily: 'sans-serif',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+            transition: 'all 0.3s ease'
+        })
+        
+        // Efecto hover
+        this.skipToLevel2Button.addEventListener('mouseenter', () => {
+            this.skipToLevel2Button.style.background = 'rgba(255, 165, 0, 1)'
+            this.skipToLevel2Button.style.transform = 'scale(1.05)'
+        })
+        this.skipToLevel2Button.addEventListener('mouseleave', () => {
+            this.skipToLevel2Button.style.background = 'rgba(255, 165, 0, 0.8)'
+            this.skipToLevel2Button.style.transform = 'scale(1)'
+        })
+        
+        // Evento click - saltar al siguiente nivel
+        this.skipToLevel2Button.addEventListener('click', () => {
+            if (this.currentLevel === 1) {
+                console.log('⏩ Saltando al nivel 2 desde el botón...')
+                this.startLevel2()
+            } else if (this.currentLevel === 2) {
+                console.log('⏩ Saltando al nivel 3 desde el botón...')
+                this.startLevel3()
+            }
+        })
+        
+        document.body.appendChild(this.skipToLevel2Button)
+        this.updateSkipButtonVisibility()
+    }
+    
+    updateSkipButtonVisibility() {
+        // Mostrar el botón en el nivel 1 y 2 (para testing)
+        if (this.skipToLevel2Button) {
+            if (this.currentLevel === 1) {
+                this.skipToLevel2Button.innerText = '⏩ Saltar al Nivel 2'
+                this.skipToLevel2Button.style.display = 'block'
+            } else if (this.currentLevel === 2) {
+                this.skipToLevel2Button.innerText = '⏩ Saltar al Nivel 3'
+                this.skipToLevel2Button.style.display = 'block'
+            } else {
+                this.skipToLevel2Button.style.display = 'none'
+            }
+        }
     }
     
     updateCheeseCounter() {
         if (this.cheeseCounter) {
-            this.cheeseCounter.innerText = `🧀 Quesos: ${this.cheesesCollected}/${this.maxCheeses}`
+            this.cheeseCounter.innerText = `🧀 Nivel ${this.currentLevel} - Quesos: ${this.cheesesCollected}/${this.maxCheeses}`
         }
+        // Actualizar visibilidad del botón de saltar
+        this.updateSkipButtonVisibility()
     }
     
     showCheeseNotification() {
@@ -397,6 +543,882 @@ export default class World {
         setTimeout(() => {
             notification.remove()
         }, 2000)
+    }
+    
+    startLevel2() {
+        console.log('🚀 Iniciando nivel 2...')
+        this.currentLevel = 2
+        
+        // Ocultar el botón de saltar al nivel 2
+        this.updateSkipButtonVisibility()
+        
+        // Mostrar notificación de teletransporte
+        const notification = document.createElement('div')
+        notification.innerText = '🌟 ¡Nivel 1 completado!\n🌀 Teletransportando al Nivel 2...'
+        notification.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 215, 0, 0.9);
+            color: #000;
+            padding: 30px 50px;
+            font-size: 28px;
+            font-weight: bold;
+            font-family: sans-serif;
+            border-radius: 12px;
+            z-index: 10000;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            pointer-events: none;
+            text-align: center;
+            white-space: pre-line;
+            animation: fadeInOut 3s ease-in-out;
+        `
+        document.body.appendChild(notification)
+        setTimeout(() => {
+            notification.remove()
+        }, 3000)
+        
+        // Remover la vía del nivel 1
+        if (this.road && this.road.mesh) {
+            this.scene.remove(this.road.mesh)
+            this.road.mesh.geometry.dispose()
+            this.road.mesh.material.dispose()
+            if (this.road.texture) {
+                this.road.texture.dispose()
+            }
+            this.road = null
+            console.log('🗑️ Vía del nivel 1 removida')
+        }
+        
+        // Remover TODOS los edificios del nivel 1 (toycar)
+        if (this.loader && this.loader.clearLevel1Buildings) {
+            this.loader.clearLevel1Buildings()
+            console.log('🗑️ Todos los edificios del nivel 1 removidos')
+        }
+        
+        // Remover partículas del queso actual
+        if (this.cheeseParticles) {
+            this.cheeseParticles.remove()
+            this.cheeseParticles = null
+        }
+        
+        // Remover quesos del nivel 1
+        this.cheeses.forEach(cheese => {
+            if (cheese.pivot) {
+                cheese.collect()
+            }
+        })
+        this.cheeses = []
+        this.cheesesCollected = 0
+        this.updateCheeseCounter()
+        
+        // Teletransportar al jugador a una posición central del nivel 2
+        if (this.robot && this.robot.body) {
+            this.robot.body.position.set(0, 1, 0)
+            this.robot.body.velocity.set(0, 0, 0)
+            this.spawnPosition.set(0, 0, 0)
+        }
+        
+        // Generar edificios del nivel 2
+        this.generateLevel2Buildings()
+        
+        // Generar el primer queso del nivel 2
+        setTimeout(() => {
+            this.generateCheese()
+        }, 1000)
+        
+        console.log('✅ Nivel 2 iniciado')
+    }
+    
+    generateLevel2Buildings() {
+        console.log('🏗️ Iniciando generación de edificios del nivel 2...')
+        console.log('🔍 Recursos disponibles:', Object.keys(this.resources.items))
+        
+        // Lista de modelos del mundo 2 (5 veces cada uno = 40 edificios totales)
+        const world2Models = [
+            'ancient_building',
+            'desert_stone_house',
+            'fantasy_house',
+            'old_castle',
+            'old_castle_1',
+            'old_house',
+            'old_house_1',
+            'stone_building'
+        ]
+        
+        // Verificar qué modelos están disponibles
+        const availableModels = []
+        const missingModels = []
+        world2Models.forEach(modelName => {
+            if (this.resources.items[modelName]) {
+                availableModels.push(modelName)
+                console.log(`✅ Modelo ${modelName} encontrado`)
+            } else {
+                missingModels.push(modelName)
+                console.warn(`❌ Modelo ${modelName} NO encontrado en resources.items`)
+            }
+        })
+        
+        if (availableModels.length === 0) {
+            console.error('❌ No se encontraron modelos del mundo 2. Verifica que estén cargados en sources.js')
+            return
+        }
+        
+        console.log(`📦 Modelos disponibles: ${availableModels.length}/${world2Models.length}`)
+        if (missingModels.length > 0) {
+            console.warn(`⚠️ Modelos faltantes: ${missingModels.join(', ')}`)
+        }
+        
+        // Crear 15 instancias de cada modelo disponible
+        const modelsToGenerate = []
+        availableModels.forEach(modelName => {
+            for (let i = 0; i < 15; i++) {
+                modelsToGenerate.push(modelName)
+            }
+        })
+        
+        // Mezclar aleatoriamente
+        for (let i = modelsToGenerate.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [modelsToGenerate[i], modelsToGenerate[j]] = [modelsToGenerate[j], modelsToGenerate[i]]
+        }
+        
+        console.log(`🏗️ Generando ${modelsToGenerate.length} edificios del nivel 2 (15 por cada modelo)...`)
+        
+        // Generar cada edificio en posiciones aleatorias alrededor del personaje
+        const robotPos = this.robot?.body?.position || new THREE.Vector3(0, 0, 0)
+        const maxRadius = 500 // Radio máximo de 500 metros
+        const minRadius = 15 // Radio mínimo de 15 metros (más cerca del personaje)
+        const minSeparation = 0.5 // Separación mínima entre edificios en metros
+        
+        // Array para almacenar las posiciones y tamaños de los edificios ya generados
+        // Cada entrada contiene: { x, z, radius }
+        const existingBuildings = []
+        
+        let buildingsCreated = 0
+        let totalAttempts = 0
+        const maxAttemptsPerBuilding = 150 // Máximo de intentos por edificio (aumentado para 120 edificios)
+        
+        modelsToGenerate.forEach((modelName, index) => {
+            const model = this.resources.items[modelName]
+            if (!model || !model.scene) {
+                console.warn(`⚠️ Modelo ${modelName} no válido (index ${index})`)
+                return
+            }
+            
+            try {
+                // Primero calcular el tamaño original y la escala para determinar la separación necesaria
+                const originalBbox = new THREE.Box3().setFromObject(model.scene)
+                let modelScale = 1.0 // Escala por defecto
+                let estimatedRadius = 2.0 // Radio estimado por defecto
+                
+                // Calcular la escala del modelo
+                if (!originalBbox.isEmpty()) {
+                    const originalSize = new THREE.Vector3()
+                    originalBbox.getSize(originalSize)
+                    const maxDimension = Math.max(originalSize.x, originalSize.y, originalSize.z)
+                    
+                    // Aumentar MUCHO MÁS la escala para que los edificios sean MUY grandes
+                    // Objetivo: altura de edificios entre 30-60 unidades (muy grandes para el juego)
+                    if (maxDimension > 1000) {
+                        modelScale = 2.0 // Modelos gigantes - escala muy grande
+                    } else if (maxDimension > 500) {
+                        modelScale = 3.0 // Modelos muy grandes - escala enorme
+                    } else if (maxDimension > 200) {
+                        modelScale = 5.0 // Modelos grandes - escala masiva
+                    } else if (maxDimension > 100) {
+                        modelScale = 8.0 // Modelos medianos-grandes - escala gigante
+                    } else if (maxDimension > 50) {
+                        modelScale = 12.0 // Modelos medianos - escala enorme
+                    } else if (maxDimension > 20) {
+                        modelScale = 20.0 // Modelos pequeños - escala masiva
+                    } else {
+                        modelScale = 40.0 // Modelos muy pequeños - escala gigante
+                    }
+                    
+                    // Calcular el radio estimado DESPUÉS de aplicar la escala
+                    // El radio es la mitad de la dimensión más grande (X o Z) después del escalado
+                    estimatedRadius = Math.max(originalSize.x, originalSize.z) * modelScale / 2
+                    // Agregar un buffer de seguridad mínimo
+                    estimatedRadius = Math.max(estimatedRadius, 1.0)
+                } else {
+                    console.warn(`⚠️ No se pudo calcular bbox para ${modelName}, usando escala por defecto 5.0`)
+                    modelScale = 5.0 // Escala muy grande por defecto
+                    estimatedRadius = 5.0 // Radio estimado por defecto
+                }
+                
+                // Intentar encontrar una posición válida (que no esté demasiado cerca de otros edificios)
+                let positionFound = false
+                let x = 0
+                let z = 0
+                let attempts = 0
+                
+                while (!positionFound && attempts < maxAttemptsPerBuilding) {
+                    attempts++
+                    totalAttempts++
+                    
+                    // Generar posición aleatoria
+                    const angle = Math.random() * Math.PI * 2
+                    // Distribuir más edificios cerca, pero también algunos lejos
+                    // Usar distribución más uniforme para aprovechar mejor el espacio
+                    const distance = minRadius + Math.random() * (maxRadius - minRadius)
+                    
+                    x = robotPos.x + Math.cos(angle) * distance
+                    z = robotPos.z + Math.sin(angle) * distance
+                    
+                    // Verificar que no esté demasiado cerca de otros edificios
+                    // Considerar el tamaño del edificio actual y los edificios existentes
+                    let tooClose = false
+                    for (const existing of existingBuildings) {
+                        const dx = x - existing.x
+                        const dz = z - existing.z
+                        const distanceToExisting = Math.sqrt(dx * dx + dz * dz)
+                        
+                        // La separación requerida es la suma de los radios + separación mínima
+                        const combinedRadius = estimatedRadius + existing.radius + minSeparation
+                        
+                        if (distanceToExisting < combinedRadius) {
+                            tooClose = true
+                            break
+                        }
+                    }
+                    
+                    // Si no está demasiado cerca, la posición es válida
+                    if (!tooClose) {
+                        positionFound = true
+                        // Guardar la posición y el radio (después del escalado) para futuras verificaciones
+                        existingBuildings.push({ x, z, radius: estimatedRadius })
+                    }
+                }
+                
+                // Si no se encontró una posición válida después de muchos intentos, intentar con separación reducida
+                if (!positionFound) {
+                    console.warn(`⚠️ No se pudo encontrar posición válida para ${modelName} (${index + 1}/${modelsToGenerate.length}) después de ${maxAttemptsPerBuilding} intentos. Intentando con separación reducida...`)
+                    
+                    // Intentar con separación reducida (solo separación mínima, sin considerar radios completos)
+                    let relaxedAttempts = 0
+                    const relaxedSeparation = minSeparation * 2 // Separación mínima más pequeña
+                    
+                    while (!positionFound && relaxedAttempts < 50) {
+                        relaxedAttempts++
+                        totalAttempts++
+                        
+                        const angle = Math.random() * Math.PI * 2
+                        const distance = minRadius + Math.random() * (maxRadius - minRadius)
+                        x = robotPos.x + Math.cos(angle) * distance
+                        z = robotPos.z + Math.sin(angle) * distance
+                        
+                        let tooClose = false
+                        for (const existing of existingBuildings) {
+                            const dx = x - existing.x
+                            const dz = z - existing.z
+                            const distanceToExisting = Math.sqrt(dx * dx + dz * dz)
+                            
+                            // Solo verificar separación mínima básica
+                            if (distanceToExisting < relaxedSeparation) {
+                                tooClose = true
+                                break
+                            }
+                        }
+                        
+                        if (!tooClose) {
+                            positionFound = true
+                            existingBuildings.push({ x, z, radius: estimatedRadius })
+                        }
+                    }
+                }
+                
+                // Si aún no se encontró, usar la última posición generada (último recurso)
+                if (!positionFound) {
+                    console.warn(`⚠️ Usando posición sin validación para ${modelName} (${index + 1}/${modelsToGenerate.length})`)
+                    existingBuildings.push({ x, z, radius: estimatedRadius })
+                }
+                
+                // Clonar el modelo - usar clone() simple y luego copiar materiales manualmente si es necesario
+                const buildingModel = model.scene.clone()
+                buildingModel.scale.set(modelScale, modelScale, modelScale)
+                
+                // Actualizar matriz del mundo después del escalado
+                buildingModel.updateMatrixWorld(true)
+                
+                // Calcular bbox DESPUÉS del escalado para posicionar en el suelo
+                const bbox = new THREE.Box3().setFromObject(buildingModel)
+                
+                let y = 0
+                let localCenter = new THREE.Vector3()
+                
+                if (bbox.isEmpty()) {
+                    console.warn(`⚠️ Bbox vacío para ${modelName}, usando posición por defecto`)
+                    // Intentar obtener bbox del modelo original sin escalar primero
+                    const originalBbox = new THREE.Box3().setFromObject(model.scene)
+                    if (!originalBbox.isEmpty()) {
+                        const originalSize = new THREE.Vector3()
+                        originalBbox.getSize(originalSize)
+                        y = (originalSize.y * modelScale) / 2
+                        console.log(`📏 Usando altura estimada: ${y.toFixed(2)} para ${modelName}`)
+                    }
+                } else {
+                    bbox.getCenter(localCenter)
+                    const size = new THREE.Vector3()
+                    bbox.getSize(size)
+                    
+                    // Posicionar en el suelo - ajustar Y para que la base esté en Y = 0
+                    y = -bbox.min.y
+                    
+                    // Crear física para el edificio
+                    if (size.x > 0 && size.y > 0 && size.z > 0) {
+                        const shape = new CANNON.Box(new CANNON.Vec3(size.x / 2 * 0.9, size.y / 2 * 0.9, size.z / 2 * 0.9))
+                        const body = new CANNON.Body({
+                            mass: 0,
+                            shape: shape,
+                            position: new CANNON.Vec3(x + localCenter.x, y + localCenter.y, z + localCenter.z),
+                            material: this.experience.physics.obstacleMaterial
+                        })
+                        this.experience.physics.world.addBody(body)
+                    }
+                }
+                
+                // Posicionar el modelo
+                buildingModel.position.set(x, y, z)
+                
+                // Asegurar que el modelo completo sea visible
+                buildingModel.visible = true
+                
+                // Asegurar que los materiales se copien correctamente y sean visibles
+                buildingModel.traverse((child) => {
+                    if (child instanceof THREE.Mesh) {
+                        // Asegurar que el mesh sea visible
+                        child.visible = true
+                        child.castShadow = true
+                        child.receiveShadow = true
+                        
+                        // Asegurar que tenga material y sea visible
+                        if (Array.isArray(child.material)) {
+                            child.material.forEach((mat) => {
+                                if (mat) {
+                                    mat.visible = true
+                                    if (mat.opacity !== undefined && mat.opacity === 0) {
+                                        mat.opacity = 1.0
+                                        mat.transparent = false
+                                    }
+                                }
+                            })
+                        } else if (child.material) {
+                            child.material.visible = true
+                            if (child.material.opacity !== undefined && child.material.opacity === 0) {
+                                child.material.opacity = 1.0
+                                child.material.transparent = false
+                            }
+                        }
+                    }
+                })
+                
+                // Agregar a la escena
+                this.scene.add(buildingModel)
+                this.level2Buildings.push(buildingModel)
+                buildingsCreated++
+                
+                // Log solo cada 10 edificios para no saturar la consola
+                if (buildingsCreated % 10 === 0 || buildingsCreated === 1) {
+                    console.log(`✅ Edificio ${buildingsCreated}/${modelsToGenerate.length}: ${modelName} en (${x.toFixed(1)}, ${z.toFixed(1)})`)
+                }
+                
+            } catch (error) {
+                console.error(`❌ Error al crear edificio ${modelName}:`, error)
+            }
+        })
+        
+        console.log(`✅ ${buildingsCreated} edificios del nivel 2 generados exitosamente`)
+        console.log(`📍 Edificios en la escena: ${this.level2Buildings.length}`)
+        console.log(`📊 Intentos totales: ${totalAttempts}, Promedio: ${(totalAttempts / buildingsCreated).toFixed(2)} intentos por edificio`)
+        
+        // Resumen final de los edificios creados
+        if (this.level2Buildings.length > 0) {
+            // Verificar separación mínima entre edificios usando los datos guardados
+            let violations = 0
+            let minDistanceFound = Infinity
+            
+            for (let i = 0; i < existingBuildings.length; i++) {
+                for (let j = i + 1; j < existingBuildings.length; j++) {
+                    const building1 = existingBuildings[i]
+                    const building2 = existingBuildings[j]
+                    const dx = building1.x - building2.x
+                    const dz = building1.z - building2.z
+                    const distance = Math.sqrt(dx * dx + dz * dz)
+                    const requiredSeparation = building1.radius + building2.radius + minSeparation
+                    
+                    if (distance < requiredSeparation) {
+                        violations++
+                    }
+                    
+                    if (distance < minDistanceFound) {
+                        minDistanceFound = distance
+                    }
+                }
+            }
+            
+            if (violations > 0) {
+                console.warn(`⚠️ Advertencia: ${violations} pares de edificios están más cerca de lo requerido`)
+                console.warn(`⚠️ Distancia mínima encontrada: ${minDistanceFound.toFixed(2)}m`)
+            } else {
+                console.log(`✅ Todos los edificios respetan la separación mínima de ${minSeparation}m`)
+                console.log(`✅ Distancia mínima entre edificios: ${minDistanceFound.toFixed(2)}m`)
+            }
+            
+            // Verificar que los edificios estén realmente en la escena
+            const buildingsInScene = this.scene.children.filter(child => 
+                this.level2Buildings.includes(child)
+            )
+            console.log(`🔍 Edificios verificados en la escena: ${buildingsInScene.length}/${this.level2Buildings.length}`)
+        }
+    }
+    
+    startLevel3() {
+        console.log('🚀 Iniciando nivel 3...')
+        this.currentLevel = 3
+        
+        // Ocultar el botón de saltar al nivel 2 (si existe)
+        this.updateSkipButtonVisibility()
+        
+        // Mostrar notificación de teletransporte
+        const notification = document.createElement('div')
+        notification.innerText = '🌟 ¡Nivel 2 completado!\n🌀 Teletransportando al Nivel 3...'
+        notification.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 165, 0, 0.9);
+            color: #000;
+            padding: 30px 50px;
+            font-size: 28px;
+            font-weight: bold;
+            font-family: sans-serif;
+            border-radius: 12px;
+            z-index: 10000;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            pointer-events: none;
+            text-align: center;
+            white-space: pre-line;
+            animation: fadeInOut 3s ease-in-out;
+        `
+        document.body.appendChild(notification)
+        setTimeout(() => {
+            notification.remove()
+        }, 3000)
+        
+        // Remover TODOS los edificios del nivel 2 y sus cuerpos físicos
+        if (this.level2Buildings && this.level2Buildings.length > 0) {
+            this.level2Buildings.forEach(building => {
+                if (building && building.parent) {
+                    this.scene.remove(building)
+                    // Limpiar geometrías y materiales
+                    building.traverse((child) => {
+                        if (child instanceof THREE.Mesh) {
+                            if (child.geometry) child.geometry.dispose()
+                            if (child.material) {
+                                if (Array.isArray(child.material)) {
+                                    child.material.forEach(mat => {
+                                        if (mat.map) mat.map.dispose()
+                                        mat.dispose()
+                                    })
+                                } else {
+                                    if (child.material.map) child.material.map.dispose()
+                                    child.material.dispose()
+                                }
+                            }
+                        }
+                    })
+                }
+            })
+            this.level2Buildings = []
+            console.log('🗑️ Edificios del nivel 2 removidos')
+        }
+        
+        // Remover partículas del queso actual
+        if (this.cheeseParticles) {
+            this.cheeseParticles.remove()
+            this.cheeseParticles = null
+        }
+        
+        // Remover quesos del nivel 2
+        this.cheeses.forEach(cheese => {
+            if (cheese.pivot) {
+                cheese.collect()
+            }
+        })
+        this.cheeses = []
+        this.cheesesCollected = 0
+        this.updateCheeseCounter()
+        
+        // Teletransportar al jugador a una posición central del nivel 3
+        if (this.robot && this.robot.body) {
+            this.robot.body.position.set(0, 1, 0)
+            this.robot.body.velocity.set(0, 0, 0)
+            this.spawnPosition.set(0, 0, 0)
+        }
+        
+        // Generar edificios del nivel 3
+        this.generateLevel3Buildings()
+        
+        // Generar el primer queso del nivel 3
+        setTimeout(() => {
+            this.generateCheese()
+        }, 1000)
+        
+        console.log('✅ Nivel 3 iniciado')
+    }
+    
+    generateLevel3Buildings() {
+        console.log('🏗️ Iniciando generación de edificios del nivel 3...')
+        
+        // Lista de modelos del mundo 3 (15 veces cada uno)
+        const world3Models = [
+            'pokemon_treecko_house',
+            'pokemon_psyduck_house',
+            'pokemon_pikachu_house',
+            'mudkip_house',
+            'meowth_house',
+            'machop_house',
+            'cyndaquil_house',
+            'cubone_house',
+            'chikorita_house',
+            'charmander_house',
+            'bulbasaur_house'
+        ]
+        
+        // Verificar qué modelos están disponibles
+        const availableModels = []
+        const missingModels = []
+        world3Models.forEach(modelName => {
+            if (this.resources.items[modelName]) {
+                availableModels.push(modelName)
+                console.log(`✅ Modelo ${modelName} encontrado`)
+            } else {
+                missingModels.push(modelName)
+                console.warn(`❌ Modelo ${modelName} NO encontrado en resources.items`)
+            }
+        })
+        
+        if (availableModels.length === 0) {
+            console.error('❌ No se encontraron modelos del mundo 3. Verifica que estén cargados en sources.js')
+            return
+        }
+        
+        console.log(`📦 Modelos disponibles: ${availableModels.length}/${world3Models.length}`)
+        if (missingModels.length > 0) {
+            console.warn(`⚠️ Modelos faltantes: ${missingModels.join(', ')}`)
+        }
+        
+        // Crear 15 instancias de cada modelo disponible
+        const modelsToGenerate = []
+        availableModels.forEach(modelName => {
+            for (let i = 0; i < 15; i++) {
+                modelsToGenerate.push(modelName)
+            }
+        })
+        
+        // Mezclar aleatoriamente
+        for (let i = modelsToGenerate.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [modelsToGenerate[i], modelsToGenerate[j]] = [modelsToGenerate[j], modelsToGenerate[i]]
+        }
+        
+        console.log(`🏗️ Generando ${modelsToGenerate.length} edificios del nivel 3 (15 por cada modelo)...`)
+        
+        // Generar cada edificio en posiciones aleatorias alrededor del personaje
+        const robotPos = this.robot?.body?.position || new THREE.Vector3(0, 0, 0)
+        const maxRadius = 500 // Radio máximo de 500 metros
+        const minRadius = 15 // Radio mínimo de 15 metros (más cerca del personaje)
+        const minSeparation = 5.0 // Separación mínima entre edificios en metros (aumentada para evitar solapamientos)
+        
+        // Array para almacenar las posiciones y tamaños de los edificios ya generados
+        // Cada entrada contiene: { x, z, radius }
+        const existingBuildings = []
+        
+        let buildingsCreated = 0
+        let totalAttempts = 0
+        const maxAttemptsPerBuilding = 150 // Máximo de intentos por edificio
+        
+        modelsToGenerate.forEach((modelName, index) => {
+            const model = this.resources.items[modelName]
+            if (!model || !model.scene) {
+                console.warn(`⚠️ Modelo ${modelName} no válido (index ${index})`)
+                return
+            }
+            
+            try {
+                // Primero calcular el tamaño original y la escala para determinar la separación necesaria
+                const originalBbox = new THREE.Box3().setFromObject(model.scene)
+                let modelScale = 1.0 // Escala por defecto
+                let estimatedRadius = 2.0 // Radio estimado por defecto
+                
+                // Calcular la escala del modelo (muy reducida para casas más pequeñas)
+                if (!originalBbox.isEmpty()) {
+                    const originalSize = new THREE.Vector3()
+                    originalBbox.getSize(originalSize)
+                    const maxDimension = Math.max(originalSize.x, originalSize.y, originalSize.z)
+                    
+                    // Escalas MUY reducidas para el nivel 3 (aproximadamente 1/4 del tamaño original del nivel 2)
+                    // Objetivo: casas pequeñas y bien separadas
+                    if (maxDimension > 1000) {
+                        modelScale = 0.5 // Modelos gigantes - escala muy pequeña
+                    } else if (maxDimension > 500) {
+                        modelScale = 0.75 // Modelos muy grandes - escala muy pequeña
+                    } else if (maxDimension > 200) {
+                        modelScale = 1.25 // Modelos grandes - escala pequeña
+                    } else if (maxDimension > 100) {
+                        modelScale = 2.0 // Modelos medianos-grandes - escala pequeña
+                    } else if (maxDimension > 50) {
+                        modelScale = 3.0 // Modelos medianos - escala pequeña
+                    } else if (maxDimension > 20) {
+                        modelScale = 5.0 // Modelos pequeños - escala pequeña
+                    } else {
+                        modelScale = 10.0 // Modelos muy pequeños - escala pequeña
+                    }
+                    
+                    // Calcular el radio estimado DESPUÉS de aplicar la escala
+                    // El radio es la mitad de la dimensión más grande (X o Z) después del escalado
+                    estimatedRadius = Math.max(originalSize.x, originalSize.z) * modelScale / 2
+                    // Agregar un buffer de seguridad mínimo
+                    estimatedRadius = Math.max(estimatedRadius, 0.5)
+                } else {
+                    console.warn(`⚠️ No se pudo calcular bbox para ${modelName}, usando escala por defecto 1.5`)
+                    modelScale = 1.5 // Escala pequeña por defecto
+                    estimatedRadius = 1.5 // Radio estimado por defecto
+                }
+                
+                // Intentar encontrar una posición válida (que no esté demasiado cerca de otros edificios)
+                let positionFound = false
+                let x = 0
+                let z = 0
+                let attempts = 0
+                
+                while (!positionFound && attempts < maxAttemptsPerBuilding) {
+                    attempts++
+                    totalAttempts++
+                    
+                    // Generar posición aleatoria
+                    const angle = Math.random() * Math.PI * 2
+                    // Distribuir más edificios cerca, pero también algunos lejos
+                    // Usar distribución más uniforme para aprovechar mejor el espacio
+                    const distance = minRadius + Math.random() * (maxRadius - minRadius)
+                    
+                    x = robotPos.x + Math.cos(angle) * distance
+                    z = robotPos.z + Math.sin(angle) * distance
+                    
+                    // Verificar que no esté demasiado cerca de otros edificios
+                    // Considerar el tamaño del edificio actual y los edificios existentes
+                    let tooClose = false
+                    for (const existing of existingBuildings) {
+                        const dx = x - existing.x
+                        const dz = z - existing.z
+                        const distanceToExisting = Math.sqrt(dx * dx + dz * dz)
+                        
+                        // La separación requerida es la suma de los radios + separación mínima
+                        const combinedRadius = estimatedRadius + existing.radius + minSeparation
+                        
+                        if (distanceToExisting < combinedRadius) {
+                            tooClose = true
+                            break
+                        }
+                    }
+                    
+                    // Si no está demasiado cerca, la posición es válida
+                    if (!tooClose) {
+                        positionFound = true
+                        // Guardar la posición y el radio (después del escalado) para futuras verificaciones
+                        existingBuildings.push({ x, z, radius: estimatedRadius })
+                    }
+                }
+                
+                // Si no se encontró una posición válida después de muchos intentos, intentar con separación reducida
+                if (!positionFound) {
+                    console.warn(`⚠️ No se pudo encontrar posición válida para ${modelName} (${index + 1}/${modelsToGenerate.length}) después de ${maxAttemptsPerBuilding} intentos. Intentando con separación reducida...`)
+                    
+                    // Intentar con separación reducida pero aún respetando un mínimo de espacio (3.0m mínimo)
+                    let relaxedAttempts = 0
+                    const relaxedSeparation = minSeparation * 0.6 // Separación mínima reducida (3.0m) pero aún significativa
+                    
+                    while (!positionFound && relaxedAttempts < 50) {
+                        relaxedAttempts++
+                        totalAttempts++
+                        
+                        const angle = Math.random() * Math.PI * 2
+                        const distance = minRadius + Math.random() * (maxRadius - minRadius)
+                        x = robotPos.x + Math.cos(angle) * distance
+                        z = robotPos.z + Math.sin(angle) * distance
+                        
+                        let tooClose = false
+                        for (const existing of existingBuildings) {
+                            const dx = x - existing.x
+                            const dz = z - existing.z
+                            const distanceToExisting = Math.sqrt(dx * dx + dz * dz)
+                            
+                            // Verificar separación considerando los radios + separación reducida
+                            const relaxedCombinedRadius = estimatedRadius + existing.radius + relaxedSeparation
+                            if (distanceToExisting < relaxedCombinedRadius) {
+                                tooClose = true
+                                break
+                            }
+                        }
+                        
+                        if (!tooClose) {
+                            positionFound = true
+                            existingBuildings.push({ x, z, radius: estimatedRadius })
+                        }
+                    }
+                }
+                
+                // Si aún no se encontró, usar la última posición generada (último recurso)
+                // Pero solo si realmente no hay más opciones
+                if (!positionFound) {
+                    console.warn(`⚠️ Usando posición sin validación para ${modelName} (${index + 1}/${modelsToGenerate.length}) - puede haber solapamiento`)
+                    existingBuildings.push({ x, z, radius: estimatedRadius })
+                }
+                
+                // Clonar el modelo - usar clone() simple y luego copiar materiales manualmente si es necesario
+                const buildingModel = model.scene.clone()
+                buildingModel.scale.set(modelScale, modelScale, modelScale)
+                
+                // Actualizar matriz del mundo después del escalado
+                buildingModel.updateMatrixWorld(true)
+                
+                // Calcular bbox DESPUÉS del escalado para posicionar en el suelo
+                const bbox = new THREE.Box3().setFromObject(buildingModel)
+                
+                let y = 0
+                let localCenter = new THREE.Vector3()
+                
+                if (bbox.isEmpty()) {
+                    console.warn(`⚠️ Bbox vacío para ${modelName}, usando posición por defecto`)
+                    // Intentar obtener bbox del modelo original sin escalar primero
+                    const originalBbox = new THREE.Box3().setFromObject(model.scene)
+                    if (!originalBbox.isEmpty()) {
+                        const originalSize = new THREE.Vector3()
+                        originalBbox.getSize(originalSize)
+                        y = (originalSize.y * modelScale) / 2
+                        console.log(`📏 Usando altura estimada: ${y.toFixed(2)} para ${modelName}`)
+                    }
+                } else {
+                    bbox.getCenter(localCenter)
+                    const size = new THREE.Vector3()
+                    bbox.getSize(size)
+                    
+                    // Posicionar en el suelo - ajustar Y para que la base esté en Y = 0
+                    y = -bbox.min.y
+                    
+                    // Crear física para el edificio
+                    if (size.x > 0 && size.y > 0 && size.z > 0) {
+                        const shape = new CANNON.Box(new CANNON.Vec3(size.x / 2 * 0.9, size.y / 2 * 0.9, size.z / 2 * 0.9))
+                        const body = new CANNON.Body({
+                            mass: 0,
+                            shape: shape,
+                            position: new CANNON.Vec3(x + localCenter.x, y + localCenter.y, z + localCenter.z),
+                            material: this.experience.physics.obstacleMaterial
+                        })
+                        this.experience.physics.world.addBody(body)
+                    }
+                }
+                
+                // Posicionar el modelo
+                buildingModel.position.set(x, y, z)
+                
+                // Rotación aleatoria alrededor del eje Y (rotación horizontal) para que miren hacia diferentes direcciones
+                const randomRotationY = Math.random() * Math.PI * 2 // Rotación aleatoria de 0 a 360 grados (0 a 2π)
+                buildingModel.rotation.y = randomRotationY
+                
+                // Asegurar que el modelo completo sea visible
+                buildingModel.visible = true
+                
+                // Asegurar que los materiales se copien correctamente y sean visibles
+                buildingModel.traverse((child) => {
+                    if (child instanceof THREE.Mesh) {
+                        // Asegurar que el mesh sea visible
+                        child.visible = true
+                        child.castShadow = true
+                        child.receiveShadow = true
+                        
+                        // Asegurar que tenga material y sea visible
+                        if (Array.isArray(child.material)) {
+                            child.material.forEach((mat) => {
+                                if (mat) {
+                                    mat.visible = true
+                                    if (mat.opacity !== undefined && mat.opacity === 0) {
+                                        mat.opacity = 1.0
+                                        mat.transparent = false
+                                    }
+                                }
+                            })
+                        } else if (child.material) {
+                            child.material.visible = true
+                            if (child.material.opacity !== undefined && child.material.opacity === 0) {
+                                child.material.opacity = 1.0
+                                child.material.transparent = false
+                            }
+                        }
+                    }
+                })
+                
+                // Agregar a la escena
+                this.scene.add(buildingModel)
+                this.level3Buildings.push(buildingModel)
+                buildingsCreated++
+                
+                // Log solo cada 10 edificios para no saturar la consola
+                if (buildingsCreated % 10 === 0 || buildingsCreated === 1) {
+                    console.log(`✅ Edificio ${buildingsCreated}/${modelsToGenerate.length}: ${modelName} en (${x.toFixed(1)}, ${z.toFixed(1)}) rotación: ${(randomRotationY * 180 / Math.PI).toFixed(1)}°`)
+                }
+                
+            } catch (error) {
+                console.error(`❌ Error al crear edificio ${modelName}:`, error)
+            }
+        })
+        
+        console.log(`✅ ${buildingsCreated} edificios del nivel 3 generados exitosamente`)
+        console.log(`📍 Edificios en la escena: ${this.level3Buildings.length}`)
+        console.log(`📊 Intentos totales: ${totalAttempts}, Promedio: ${buildingsCreated > 0 ? (totalAttempts / buildingsCreated).toFixed(2) : 0} intentos por edificio`)
+        
+        // Resumen final de los edificios creados
+        if (this.level3Buildings.length > 0) {
+            // Verificar separación mínima entre edificios usando los datos guardados
+            let violations = 0
+            let minDistanceFound = Infinity
+            
+            for (let i = 0; i < existingBuildings.length; i++) {
+                for (let j = i + 1; j < existingBuildings.length; j++) {
+                    const building1 = existingBuildings[i]
+                    const building2 = existingBuildings[j]
+                    const dx = building1.x - building2.x
+                    const dz = building1.z - building2.z
+                    const distance = Math.sqrt(dx * dx + dz * dz)
+                    const requiredSeparation = building1.radius + building2.radius + minSeparation
+                    
+                    if (distance < requiredSeparation) {
+                        violations++
+                    }
+                    
+                    if (distance < minDistanceFound) {
+                        minDistanceFound = distance
+                    }
+                }
+            }
+            
+            if (violations > 0) {
+                console.warn(`⚠️ Advertencia: ${violations} pares de edificios están más cerca de lo requerido`)
+                console.warn(`⚠️ Distancia mínima encontrada: ${minDistanceFound.toFixed(2)}m`)
+            } else {
+                console.log(`✅ Todos los edificios respetan la separación mínima de ${minSeparation}m`)
+                console.log(`✅ Distancia mínima entre edificios: ${minDistanceFound.toFixed(2)}m`)
+            }
+            
+            // Verificar que los edificios estén realmente en la escena
+            const buildingsInScene = this.scene.children.filter(child => 
+                this.level3Buildings.includes(child)
+            )
+            console.log(`🔍 Edificios verificados en la escena: ${buildingsInScene.length}/${this.level3Buildings.length}`)
+        }
     }
     
     onAllCheesesCollected() {
@@ -445,3 +1467,4 @@ export default class World {
     }
 
 }
+

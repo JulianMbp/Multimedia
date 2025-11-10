@@ -11,10 +11,55 @@ export default class ToyCarLoader {
         this.physics = this.experience.physics
         this.prizes = []
         this.buildingPositions = [] // Almacenar posiciones de edificios para la vía
+        this.level1Buildings = [] // Almacenar referencias a los modelos del nivel 1
+        this.level1PhysicsBodies = [] // Almacenar referencias a los cuerpos físicos del nivel 1
     }
     
     getBuildingPositions() {
         return this.buildingPositions
+    }
+    
+    // Método para limpiar todos los edificios del nivel 1
+    clearLevel1Buildings() {
+        console.log('🗑️ Removiendo edificios del nivel 1...')
+        
+        // Remover modelos de la escena
+        this.level1Buildings.forEach(building => {
+            if (building && building.parent) {
+                this.scene.remove(building)
+                // Limpiar geometrías y materiales
+                building.traverse((child) => {
+                    if (child instanceof THREE.Mesh) {
+                        if (child.geometry) child.geometry.dispose()
+                        if (child.material) {
+                            if (Array.isArray(child.material)) {
+                                child.material.forEach(mat => {
+                                    if (mat.map) mat.map.dispose()
+                                    mat.dispose()
+                                })
+                            } else {
+                                if (child.material.map) child.material.map.dispose()
+                                child.material.dispose()
+                            }
+                        }
+                    }
+                })
+            }
+        })
+        
+        // Remover cuerpos físicos
+        this.level1PhysicsBodies.forEach(body => {
+            if (body && this.physics.world) {
+                this.physics.world.removeBody(body)
+            }
+        })
+        
+        // Limpiar arrays
+        this.level1Buildings = []
+        this.level1PhysicsBodies = []
+        this.buildingPositions = []
+        
+        console.log('✅ Edificios del nivel 1 removidos')
     }
 
     async loadFromAPI() {
@@ -192,6 +237,7 @@ export default class ToyCarLoader {
                     model.position.set(normalizedX, normalizedY, normalizedZ)
                     this.scene.add(model)
                     this.buildingPositions.push({ x: normalizedX, y: normalizedY, z: normalizedZ })
+                    this.level1Buildings.push(model) // Guardar referencia
                     buildingCount++
                     return
                 }
@@ -218,6 +264,9 @@ export default class ToyCarLoader {
                 
                 // Guardar posición para la vía
                 this.buildingPositions.push({ x: normalizedX, y: adjustedY, z: normalizedZ })
+                
+                // Guardar referencia al modelo para poder removerlo después
+                this.level1Buildings.push(model)
                 
                 // Agregar el modelo a la escena
                 this.scene.add(model)
@@ -272,6 +321,9 @@ export default class ToyCarLoader {
                 })
 
                 this.physics.world.addBody(body)
+                
+                // Guardar referencia al cuerpo físico para poder removerlo después
+                this.level1PhysicsBodies.push(body)
             })
 
             // Resumen de carga
