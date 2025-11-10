@@ -1,6 +1,6 @@
 // src/network/SocketManager.js
-import * as THREE from 'three'
 import { io } from 'socket.io-client'
+import * as THREE from 'three'
 
 export default class SocketManager {
     constructor(experience) {
@@ -80,21 +80,24 @@ export default class SocketManager {
         }
 
         _createRemoteRobot(id, position) {
-            const original = this.experience.resources.items.robotModel
+            const original = this.experience.resources.items.mouseModel
 
-            if (!original || !original.scene || !original.animations) {
-                console.warn('⚠️ robotModel no está completamente cargado')
+            if (!original || !original.animations) {
+                console.warn('⚠️ mouseModel no está completamente cargado')
                 return
             }
 
-            const model = original.scene.clone()
-            model.scale.set(0.3, 0.3, 0.3)
-            model.position.set(position.x, position.y, position.z)
+            // Para modelos FBX, el modelo es directamente el objeto cargado (no tiene .scene)
+            const model = original.clone()
+            model.scale.set(0.01, 0.01, 0.01) // Misma escala que el personaje principal
+            model.position.set(position.x, position.y - 0.5, position.z)
 
             const mixer = new THREE.AnimationMixer(model)
-            const idleClip = original.animations.find(clip => clip.name.toLowerCase().includes('idle')) || original.animations[0]
-            const action = mixer.clipAction(idleClip)
-            action.play()
+            const idleClip = original.animations.find(clip => clip.name.toLowerCase().includes('idle') || clip.name.toLowerCase().includes('walk')) || original.animations[0]
+            if (idleClip) {
+                const action = mixer.clipAction(idleClip)
+                action.play()
+            }
 
             this.robots[id] = {
                 model,

@@ -20,17 +20,20 @@ export default class Robot {
     }
 
     setModel() {
-        this.model = this.resources.items.robotModel.scene
-        this.model.scale.set(0.3, 0.3, 0.3)
-        this.model.position.set(0, -0.3, 0) // Centrar respecto al cuerpo físico
+        // Cargar modelo FBX del mouse
+        this.model = this.resources.items.mouseModel
+        this.model.scale.set(0.03, 0.03, 0.03) // Escalar el modelo FBX (suele ser más grande)
+        this.model.position.set(0, -0.4, 0) // Ajustar posición para que esté en el suelo
 
         this.group = new THREE.Group()
         this.group.add(this.model)
         this.scene.add(this.group)
 
+        // Habilitar sombras
         this.model.traverse((child) => {
             if (child instanceof THREE.Mesh) {
                 child.castShadow = true
+                child.receiveShadow = true
             }
         })
     }
@@ -77,45 +80,233 @@ export default class Robot {
         this.animation.mixer = new THREE.AnimationMixer(this.model)
 
         this.animation.actions = {}
-        this.animation.actions.dance = this.animation.mixer.clipAction(this.resources.items.robotModel.animations[0])
-        this.animation.actions.death = this.animation.mixer.clipAction(this.resources.items.robotModel.animations[1])
-        this.animation.actions.idle = this.animation.mixer.clipAction(this.resources.items.robotModel.animations[2])
-        this.animation.actions.jump = this.animation.mixer.clipAction(this.resources.items.robotModel.animations[3])
-        this.animation.actions.walking = this.animation.mixer.clipAction(this.resources.items.robotModel.animations[10])
-
-        this.animation.actions.current = this.animation.actions.idle
-        this.animation.actions.current.play()
-
-        this.animation.actions.jump.setLoop(THREE.LoopOnce)
-        this.animation.actions.jump.clampWhenFinished = true
-        this.animation.actions.jump.onFinished = () => {
-            this.animation.play('idle')
+        
+        // Debug: Ver la estructura completa del modelo FBX
+        const mouseModel = this.resources.items.mouseModel
+        console.log('🔍 Estructura del modelo FBX:', {
+            type: mouseModel?.constructor?.name,
+            hasAnimations: !!mouseModel?.animations,
+            animationsLength: mouseModel?.animations?.length,
+            keys: mouseModel ? Object.keys(mouseModel) : [],
+            modelType: mouseModel?.type,
+            children: mouseModel?.children?.length,
+            name: mouseModel?.name
+        })
+        
+        // Log detallado de la estructura
+        if (mouseModel) {
+            console.log('🔍 Todas las propiedades del modelo:', Object.keys(mouseModel))
+            console.log('🔍 Tipo de objeto:', mouseModel.constructor.name)
+            console.log('🔍 Animaciones directas:', mouseModel.animations)
+            if (mouseModel.animations) {
+                console.log('🔍 Tipo de animaciones:', mouseModel.animations.constructor.name)
+                console.log('🔍 Longitud de animaciones:', mouseModel.animations.length)
+                if (mouseModel.animations.length > 0) {
+                    console.log('🔍 Primera animación:', mouseModel.animations[0])
+                }
+            }
         }
+        
+        // El modelo FBX tiene animaciones - pueden estar en diferentes lugares
+        // En FBX, las animaciones pueden estar en:
+        // 1. mouseModel.animations (array directo)
+        // 2. Dentro de una Armature (común en modelos con esqueleto)
+        // 3. En los hijos del modelo (Group children)
+        let fbxAnimations = null
+        
+        // Método 1: Intentar acceder directamente a las animaciones
+        if (mouseModel?.animations) {
+            if (Array.isArray(mouseModel.animations)) {
+                fbxAnimations = mouseModel.animations
+                console.log('✅ Animaciones encontradas en mouseModel.animations (array)')
+            } else if (mouseModel.animations.length !== undefined) {
+                // Puede ser un objeto similar a array
+                fbxAnimations = Array.from(mouseModel.animations)
+                console.log('✅ Animaciones encontradas en mouseModel.animations (convertidas)')
+            }
+        }
+        
+        // Método 2: Buscar en this.model (que es el mismo objeto)
+        if ((!fbxAnimations || fbxAnimations.length === 0) && this.model?.animations) {
+            if (Array.isArray(this.model.animations)) {
+                fbxAnimations = this.model.animations
+                console.log('✅ Animaciones encontradas en this.model.animations')
+            }
+        }
+        
+        // Método 3: Buscar en los hijos del modelo (especialmente en Armatures)
+        if (!fbxAnimations || fbxAnimations.length === 0) {
+            const allAnimations = []
+            const armatures = []
+            
+            mouseModel?.traverse?.((child) => {
+                // Buscar Armatures (esqueletos)
+                if (child.type === 'SkinnedMesh' || child.name?.toLowerCase().includes('armature')) {
+                    armatures.push(child)
+                    console.log('🔍 Armature encontrada:', child.name, child.type)
+                }
+                
+                // Buscar animaciones en cualquier hijo
+                if (child.animations && child.animations.length > 0) {
+                    console.log('🔍 Animaciones encontradas en hijo:', child.name, child.type, child.animations.length)
+                    allAnimations.push(...child.animations)
+                }
+            })
+            
+            if (allAnimations.length > 0) {
+                fbxAnimations = allAnimations
+                console.log('✅ Animaciones encontradas en hijos del modelo:', allAnimations.length)
+            }
+            
+            // Si encontramos armatures pero no animaciones, las animaciones pueden estar en el modelo principal
+            if (armatures.length > 0 && (!fbxAnimations || fbxAnimations.length === 0)) {
+                console.log('⚠️ Armatures encontradas pero sin animaciones en hijos. Las animaciones deberían estar en el modelo principal.')
+            }
+        }
+        
+        // Método 4: Verificar si el loader FBX guarda las animaciones en una propiedad especial
+        // A veces FBXLoader almacena animaciones en el objeto directamente
+        if ((!fbxAnimations || fbxAnimations.length === 0) && mouseModel) {
+            // Verificar todas las propiedades que puedan contener animaciones
+            for (const key in mouseModel) {
+                if (key.toLowerCase().includes('anim') || key.toLowerCase().includes('clip')) {
+                    const prop = mouseModel[key]
+                    if (Array.isArray(prop) && prop.length > 0 && prop[0]?.tracks) {
+                        fbxAnimations = prop
+                        console.log(`✅ Animaciones encontradas en propiedad: ${key}`)
+                        break
+                    }
+                }
+            }
+        }
+        
+        if (!fbxAnimations || fbxAnimations.length === 0) {
+            console.error('❌ No se encontraron animaciones en el modelo FBX')
+            console.log('📋 Modelo completo:', mouseModel)
+            return
+        }
+        
+        console.log(`✅ Total de animaciones encontradas: ${fbxAnimations.length}`)
+        
+        // Buscar la animación de caminar (puede tener diferentes nombres)
+        let walkingAnimation = null
+        
+        // Buscar animaciones por nombre común
+        for (let i = 0; i < fbxAnimations.length; i++) {
+            const anim = fbxAnimations[i]
+            const animName = anim.name ? anim.name.toLowerCase() : `animation_${i}`
+            console.log(`🔍 Animación ${i}:`, {
+                name: anim.name || `animation_${i}`,
+                duration: anim.duration,
+                tracks: anim.tracks?.length,
+                type: anim.constructor?.name
+            })
+            
+            // Buscar animación de caminar
+            if (animName.includes('walk') || animName.includes('walking') || animName.includes('move')) {
+                walkingAnimation = anim
+                console.log('✅ Animación de caminar encontrada:', anim.name)
+            }
+        }
+        
+        // Si no se encuentra walking, usar la primera animación disponible que tenga tracks
+        if (!walkingAnimation && fbxAnimations.length > 0) {
+            // Buscar la primera animación que tenga tracks (la animación válida)
+            for (let i = 0; i < fbxAnimations.length; i++) {
+                if (fbxAnimations[i].tracks && fbxAnimations[i].tracks.length > 0) {
+                    walkingAnimation = fbxAnimations[i]
+                    console.log('✅ Usando animación con tracks como walking:', walkingAnimation.name)
+                    break
+                }
+            }
+        }
+        
+        // Crear acción de animación de caminar
+        if (walkingAnimation && walkingAnimation.tracks && walkingAnimation.tracks.length > 0) {
+            this.animation.actions.walking = this.animation.mixer.clipAction(walkingAnimation)
+            this.animation.actions.walking.setLoop(THREE.LoopRepeat)
+            this.animation.actions.walking.setEffectiveWeight(1.0)
+            this.animation.actions.walking.setEffectiveTimeScale(1.0)
+            console.log('✅ Acción de walking creada:', {
+                name: walkingAnimation.name,
+                duration: walkingAnimation.duration,
+                tracks: walkingAnimation.tracks.length,
+                loop: 'repeat'
+            })
+        } else {
+            console.error('❌ No se pudo crear la acción de walking - animación inválida')
+            return
+        }
+        
+        // No iniciar ninguna animación por defecto - solo cuando el personaje se mueva
+        this.animation.actions.current = null
 
         this.animation.play = (name) => {
             const newAction = this.animation.actions[name]
+            if (!newAction) {
+                console.warn(`⚠️ Animación "${name}" no encontrada`)
+                return
+            }
+            
             const oldAction = this.animation.actions.current
 
+            // Si la acción ya está reproduciéndose, no hacer nada
+            if (oldAction === newAction && oldAction.isRunning()) {
+                return
+            }
+
+            // Si hay una animación anterior diferente, detenerla primero
+            if (oldAction && oldAction !== newAction) {
+                oldAction.fadeOut(0.2)
+                oldAction.stop()
+            }
+
+            // Reproducir la nueva animación
             newAction.reset()
             newAction.play()
-            newAction.crossFadeFrom(oldAction, 0.3)
+            newAction.setEffectiveTimeScale(1.0)
+            newAction.setEffectiveWeight(1.0)
+            newAction.fadeIn(0.2)
+            
             this.animation.actions.current = newAction
+            
+            console.log(`▶️ Reproduciendo animación: ${name}`, {
+                isRunning: newAction.isRunning(),
+                enabled: newAction.enabled,
+                timeScale: newAction.getEffectiveTimeScale(),
+                weight: newAction.getEffectiveWeight()
+            })
 
             if (name === 'walking') {
                 this.walkSound.play()
             } else {
                 this.walkSound.stop()
             }
-
-            if (name === 'jump') {
-                this.jumpSound.play()
+        }
+        
+        this.animation.stop = () => {
+            if (this.animation.actions.current) {
+                this.animation.actions.current.fadeOut(0.2)
+                this.animation.actions.current.stop()
+                this.animation.actions.current = null
+                this.walkSound.stop()
+                console.log('⏸️ Animación detenida')
             }
         }
+        
+        console.log('✅ Animaciones del mouse cargadas:', {
+            walking: walkingAnimation?.name,
+            totalAnimations: fbxAnimations.length,
+            allAnimations: fbxAnimations.map(a => a.name)
+        })
     }
 
     update() {
+        // IMPORTANTE: Actualizar el mixer de animaciones PRIMERO
         const delta = this.time.delta * 0.001
-        this.animation.mixer.update(delta)
+        if (this.animation && this.animation.mixer) {
+            this.animation.mixer.update(delta)
+        }
 
         const keys = this.keyboard.getState()
         const moveForce = 150 // Aumentado de 80 a 150 para movimiento más rápido
@@ -181,12 +372,14 @@ export default class Robot {
 
         // Animaciones según movimiento
         if (isMoving) {
-            if (this.animation.actions.current !== this.animation.actions.walking) {
+            // Si el personaje se está moviendo, reproducir animación de caminar
+            if (!this.animation.actions.current || this.animation.actions.current !== this.animation.actions.walking) {
                 this.animation.play('walking')
             }
         } else {
-            if (this.animation.actions.current !== this.animation.actions.idle) {
-                this.animation.play('idle')
+            // Si el personaje no se está moviendo, detener la animación
+            if (this.animation.actions.current === this.animation.actions.walking) {
+                this.animation.stop()
             }
         }
 
@@ -196,7 +389,7 @@ export default class Robot {
     }
 
     // Método para mover el robot desde el exterior VR
-    moveInDirection(dir, speed) {
+    moveInDirection() {
         if (!window.userInteracted || !this.experience.renderer.instance.xr.isPresenting) {
             return
         }

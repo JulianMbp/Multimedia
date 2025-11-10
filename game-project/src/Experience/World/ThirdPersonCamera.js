@@ -9,25 +9,24 @@ export default class ThirdPersonCamera {
 
         const isMobile = isMobileDevice()
 
-        // Distancia y altura adaptada
+        // Distancia y altura adaptada - Aumentada para mejor campo de visión
         this.offset = isMobile
-            ? new THREE.Vector3(0, 3.5, -7)  // móvil: más alto y atrás
-            : new THREE.Vector3(0, 2.5, -5)
+            ? new THREE.Vector3(0, 5.0, -8)  // móvil: más alto y atrás
+            : new THREE.Vector3(0, 4.5, -7)  // Desktop: más alto para ver partículas
 
-        // Fijar altura para evitar sacudidas
-        this.fixedY = isMobile ? 3.5 : 2.5
+        // Fijar altura para evitar sacudidas - Aumentada
+        this.fixedY = isMobile ? 5.0 : 4.5
     }
 
     update() {
         if (!this.target) return
 
-        // Si OrbitControls está activo (usuario moviendo mouse), no sobrescribir
+        // Si OrbitControls está activo (usuario moviendo mouse), 
+        // el seguimiento del target se hace en Camera.js
+        // Aquí solo retornamos para no interferir con OrbitControls
         const orbitControls = this.experience.camera?.controls
         if (orbitControls && orbitControls.enabled) {
-            // Permitir que OrbitControls maneje la cámara
-            // Pero mantener el target cerca del robot para que pueda orbitar alrededor
-            const basePosition = this.target.position.clone()
-            orbitControls.target.lerp(basePosition, 0.1)
+            // El target se actualiza en Camera.js para seguir al robot
             return
         }
 
@@ -45,8 +44,14 @@ export default class ThirdPersonCamera {
 
         this.camera.position.lerp(cameraPosition, 0.15)
 
-        // Siempre mirar al centro del robot (con altura fija)
-        const lookAt = basePosition.clone().add(new THREE.Vector3(0, 1.2, 0))
+        // Mirar hacia adelante en la dirección del robot, no hacia el suelo
+        // Calcular un punto de mira que esté adelante del robot, no directamente sobre él
+        const lookAtDistance = 20 // Distancia hacia adelante donde queremos que mire la cámara
+        const lookAt = new THREE.Vector3(
+            basePosition.x + direction.x * lookAtDistance,
+            basePosition.y + 1.5, // Altura del punto de mira (a la altura del robot)
+            basePosition.z + direction.z * lookAtDistance
+        )
         this.camera.lookAt(lookAt)
     }
 }

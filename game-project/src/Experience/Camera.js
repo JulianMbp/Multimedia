@@ -46,7 +46,31 @@ export default class Camera {
     update() {
         // Solo actualizar OrbitControls si están habilitados
         if (this.controls && this.controls.enabled) {
+            // Hacer que OrbitControls siga al personaje principal
+            this.updateTargetToFollowCharacter()
             this.controls.update()
+        }
+    }
+    
+    updateTargetToFollowCharacter() {
+        // Obtener referencia al robot desde la experiencia
+        const robot = this.experience.world?.robot
+        if (!robot || !robot.body) return
+        
+        // Obtener la posición del robot
+        const robotPosition = robot.body.position
+        const targetHeight = 1.5 // Altura del target (a la altura del robot)
+        
+        // Actualizar el target de OrbitControls para que siga al robot
+        // Usar lerp para un seguimiento suave pero responsivo
+        const targetPosition = new THREE.Vector3(robotPosition.x, targetHeight, robotPosition.z)
+        this.controls.target.lerp(targetPosition, 0.15) // Factor de suavizado (más responsivo que 0.1)
+        
+        // Si el robot se está moviendo, hacer el seguimiento más rápido
+        const robotSpeed = robot.body.velocity.length()
+        if (robotSpeed > 0.5) {
+            // Cuando se mueve, seguir más rápido
+            this.controls.target.lerp(targetPosition, 0.25)
         }
     }
 }

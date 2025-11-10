@@ -18,7 +18,7 @@ export default class Cheese {
         // 🛠️ Resetear la posición del visual para que herede la del pivot
         visual.position.set(0, 0, 0)
         visual.rotation.set(0, 0, 0)
-        visual.scale.set(0.5, 0.5, 0.5) // Escalar el queso para que sea más pequeño
+        visual.scale.set(0.8, 0.8, 0.8) // Escalar el queso para que sea más pequeño
 
         // Agregar el visual al pivot
         this.pivot.add(visual)

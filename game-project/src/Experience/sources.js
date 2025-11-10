@@ -27,9 +27,9 @@ export default [
         path: '/models/Fox/glTF/Fox.gltf'
     },
     {
-        name: 'robotModel',
-        type: 'gltfModel',
-        path: '/models/Robot/Robot.glb'
+        name: 'mouseModel',
+        type: 'fbxModel',
+        path: '/models/mouse/Walking.fbx'
     },
     {
         name: 'cheeseModel',

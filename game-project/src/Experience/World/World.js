@@ -4,9 +4,11 @@ import MobileControls from '../../controls/MobileControls.js'
 import ToyCarLoader from '../../loaders/ToyCarLoader.js'
 import AmbientSound from './AmbientSound.js'
 import Cheese from './Cheese.js'
+import CheeseParticles from './CheeseParticles.js'
 import Environment from './Environment.js'
 import Floor from './Floor.js'
 import Fox from './Fox.js'
+import Portal from './Portal.js'
 import Road from './Road.js'
 import Robot from './Robot.js'
 import Sound from './Sound.js'
@@ -29,8 +31,12 @@ export default class World {
         
         // Sistema de quesos
         this.cheeses = []
-        this.maxCheeses = 10
+        this.maxCheeses = 2 // Reducido a 2 para pruebas
+        this.cheesesCollected = 0
         this.cheeseModel = null
+        this.cheeseParticles = null
+        this.portal = null
+        this.spawnPosition = new THREE.Vector3(0, 0, 0) // Posición inicial del spawn
 
         // Permitimos recoger premios tras 2s
         setTimeout(() => {
@@ -60,6 +66,15 @@ export default class World {
             this.fox = new Fox(this.experience)
             this.robot = new Robot(this.experience)
             
+            // Guardar posición inicial del spawn (donde aparece el robot)
+            if (this.robot && this.robot.body) {
+                this.spawnPosition.set(
+                    this.robot.body.position.x,
+                    this.robot.body.position.y,
+                    this.robot.body.position.z
+                )
+            }
+            
             // 🧀 Inicializar sistema de quesos
             this.cheeseModel = this.resources.items.cheeseModel
             if (this.cheeseModel) {
@@ -70,6 +85,9 @@ export default class World {
             } else {
                 console.warn('⚠️ Modelo de queso no encontrado')
             }
+            
+            // Crear contador de quesos en el HUD
+            this.createCheeseCounter()
 
             this.experience.tracker.showCancelButton()
             //Registrando experiencia VR con el robot
@@ -110,6 +128,17 @@ export default class World {
         
         // Actualiza quesos
         this.cheeses?.forEach(c => c.update(delta))
+        
+        // Actualizar partículas del queso
+        if (this.cheeseParticles && this.robot && this.cheeses.length > 0) {
+            const robotPos = this.robot.body.position
+            this.cheeseParticles.update(robotPos)
+        }
+        
+        // Actualizar portal
+        if (this.portal) {
+            this.portal.update(delta)
+        }
 
 
         // Lógica de recogida
@@ -156,11 +185,27 @@ export default class World {
                 if (dist < 1.2 && moved) {
                     cheese.collect()
                     this.cheeses.splice(idx, 1)
+                    this.cheesesCollected++
                     
-                    console.log(`🧀 Queso recogido. Quedan: ${this.maxCheeses - this.cheeses.length}`)
+                    // Actualizar contador
+                    this.updateCheeseCounter()
                     
-                    // Generar un nuevo queso si no hemos alcanzado el máximo
-                    if (this.cheeses.length < this.maxCheeses) {
+                    // Remover partículas del queso recogido
+                    if (this.cheeseParticles) {
+                        this.cheeseParticles.remove()
+                        this.cheeseParticles = null
+                    }
+                    
+                    // Mostrar notificación temporal
+                    this.showCheeseNotification()
+                    
+                    console.log(`🧀 Queso recogido. Total: ${this.cheesesCollected}/${this.maxCheeses}`)
+                    
+                    // Verificar si se completaron todos los quesos
+                    if (this.cheesesCollected >= this.maxCheeses) {
+                        this.onAllCheesesCollected()
+                    } else {
+                        // Generar un nuevo queso si no hemos alcanzado el máximo
                         setTimeout(() => {
                             this.generateCheese()
                         }, 500)
@@ -196,9 +241,9 @@ export default class World {
         const maxAttempts = 50
         
         while (attempts < maxAttempts) {
-            // Generar posición aleatoria alrededor del robot (radio de 1 metro = distancia de 1-3 unidades)
+            // Generar posición aleatoria alrededor del robot (radio de 100 metros)
             const angle = Math.random() * Math.PI * 2
-            const distance = 1 + Math.random() * 2 // Entre 1 y 3 metros del robot
+            const distance = 80 + Math.random() * 20 // Entre 80 y 100 metros del robot
             const x = robotPos.x + Math.cos(angle) * distance
             const z = robotPos.z + Math.sin(angle) * distance
             const y = 0.3 // Ligeramente sobre el suelo
@@ -261,17 +306,142 @@ export default class World {
             }
             
             // Posición válida, crear el queso
+            const cheesePosition = new THREE.Vector3(x, y, z)
             const cheese = new Cheese({
                 model: this.cheeseModel.scene,
-                position: new THREE.Vector3(x, y, z),
+                position: cheesePosition,
                 scene: this.scene
             })
             this.cheeses.push(cheese)
+            
+            // Crear partículas que guíen al queso
+            if (this.cheeseParticles) {
+                this.cheeseParticles.remove()
+            }
+            this.cheeseParticles = new CheeseParticles(this.scene, cheesePosition)
+            
             console.log(`🧀 Queso generado en: (${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)})`)
             return
         }
         
         console.warn('⚠️ No se pudo generar queso después de múltiples intentos')
+    }
+    
+    createCheeseCounter() {
+        this.cheeseCounter = document.createElement('div')
+        this.cheeseCounter.id = 'hud-cheese'
+        this.updateCheeseCounter()
+        Object.assign(this.cheeseCounter.style, {
+            position: 'fixed',
+            top: '16px',
+            left: '20px',
+            fontSize: '16px',
+            fontWeight: 'bold',
+            background: 'rgba(0,0,0,0.6)',
+            color: 'white',
+            padding: '6px 12px',
+            borderRadius: '8px',
+            zIndex: 9999,
+            fontFamily: 'monospace',
+            pointerEvents: 'none'
+        })
+        document.body.appendChild(this.cheeseCounter)
+    }
+    
+    updateCheeseCounter() {
+        if (this.cheeseCounter) {
+            this.cheeseCounter.innerText = `🧀 Quesos: ${this.cheesesCollected}/${this.maxCheeses}`
+        }
+    }
+    
+    showCheeseNotification() {
+        // Crear notificación temporal
+        const notification = document.createElement('div')
+        notification.innerText = '🧀 ¡Queso recogido!'
+        notification.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 200, 0, 0.9);
+            color: #000;
+            padding: 20px 40px;
+            font-size: 24px;
+            font-weight: bold;
+            font-family: sans-serif;
+            border-radius: 12px;
+            z-index: 10000;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            pointer-events: none;
+            animation: fadeInOut 2s ease-in-out;
+        `
+        
+        // Agregar animación CSS
+        if (!document.getElementById('cheese-notification-style')) {
+            const style = document.createElement('style')
+            style.id = 'cheese-notification-style'
+            style.textContent = `
+                @keyframes fadeInOut {
+                    0% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+                    20% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                    80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                    100% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+                }
+            `
+            document.head.appendChild(style)
+        }
+        
+        document.body.appendChild(notification)
+        
+        // Remover después de 2 segundos
+        setTimeout(() => {
+            notification.remove()
+        }, 2000)
+    }
+    
+    onAllCheesesCollected() {
+        console.log('🎉 ¡Todos los quesos recogidos!')
+        
+        // Mostrar notificación de completado
+        const notification = document.createElement('div')
+        notification.innerText = '🎉 ¡Todos los quesos recogidos!\n🌀 El portal ha aparecido!'
+        notification.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 255, 255, 0.9);
+            color: #000;
+            padding: 30px 50px;
+            font-size: 28px;
+            font-weight: bold;
+            font-family: sans-serif;
+            border-radius: 12px;
+            z-index: 10000;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            pointer-events: none;
+            text-align: center;
+            white-space: pre-line;
+            animation: fadeInOut 4s ease-in-out;
+        `
+        document.body.appendChild(notification)
+        setTimeout(() => {
+            notification.remove()
+        }, 4000)
+        
+        // Crear el portal en la posición inicial del spawn (en el suelo)
+        // El portal se genera completamente con Three.js, sin necesidad de modelo GLB
+        const portalPosition = new THREE.Vector3(
+            this.spawnPosition.x,
+            0, // Forzar Y = 0 para que esté en el suelo
+            this.spawnPosition.z
+        )
+        this.portal = new Portal({
+            position: portalPosition,
+            scene: this.scene
+        })
+        this.portal.activate()
+        console.log('🌀 Portal creado en:', portalPosition)
     }
 
 }

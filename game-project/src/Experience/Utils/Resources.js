@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import EventEmitter from './EventEmitter.js'
 
@@ -21,6 +22,7 @@ export default class Resources extends EventEmitter
     {
         this.loaders = {}
         this.loaders.gltfLoader = new GLTFLoader()
+        this.loaders.fbxLoader = new FBXLoader()
         this.loaders.textureLoader = new THREE.TextureLoader()
         this.loaders.cubeTextureLoader = new THREE.CubeTextureLoader()
     }
@@ -43,6 +45,40 @@ export default class Resources extends EventEmitter
                     (error) =>
                     {
                         console.error(`❌ Error al cargar modelo ${source.name} desde ${source.path}`);
+                        console.error(error);
+                    }
+                );
+            }
+            else if (source.type === 'fbxModel')
+            {
+                this.loaders.fbxLoader.load(
+                    source.path,
+                    (file) =>
+                    {
+                        // Debug: Verificar estructura del archivo FBX cargado
+                        console.log(`✅ Modelo FBX cargado: ${source.name}`, {
+                            type: file?.constructor?.name,
+                            hasAnimations: !!file?.animations,
+                            animationsCount: file?.animations?.length || 0,
+                            childrenCount: file?.children?.length || 0,
+                            keys: file ? Object.keys(file) : []
+                        })
+                        
+                        if (file?.animations && file.animations.length > 0) {
+                            console.log(`✅ Animaciones encontradas en FBX (${file.animations.length}):`)
+                            file.animations.forEach((anim, index) => {
+                                console.log(`  ${index}: ${anim.name || 'Sin nombre'} (${anim.duration}s, ${anim.tracks?.length || 0} tracks)`)
+                            })
+                        } else {
+                            console.warn(`⚠️ No se encontraron animaciones en el modelo FBX ${source.name}`)
+                        }
+                        
+                        this.sourceLoaded(source, file);
+                    },
+                    undefined,
+                    (error) =>
+                    {
+                        console.error(`❌ Error al cargar modelo FBX ${source.name} desde ${source.path}`);
                         console.error(error);
                     }
                 );
