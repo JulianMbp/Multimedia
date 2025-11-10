@@ -1553,13 +1553,20 @@ export default class World {
         // Limpiar enemigos existentes
         this.clearEnemies()
         
-        // Número de enemigos a generar (puedes ajustar esto)
-        const numberOfEnemies = 5 + this.currentLevel * 2 // Más enemigos en niveles superiores
+        // Número de enemigos según el nivel
+        let numberOfEnemies = 1 // Nivel 1 por defecto
+        if (this.currentLevel === 1) {
+            numberOfEnemies = 1
+        } else if (this.currentLevel === 2) {
+            numberOfEnemies = 3
+        } else if (this.currentLevel === 3) {
+            numberOfEnemies = 5
+        }
         
         const robotPos = this.robot.body.position
         const spawnDistance = 100 // Distancia de 100 metros
         
-        console.log(`👾 Generando ${numberOfEnemies} enemigos a ${spawnDistance} metros del jugador...`)
+        console.log(`👾 Generando ${numberOfEnemies} enemigos para el nivel ${this.currentLevel} a ${spawnDistance} metros del jugador...`)
         
         for (let i = 0; i < numberOfEnemies; i++) {
             // Generar posición aleatoria alrededor del jugador a 100 metros
