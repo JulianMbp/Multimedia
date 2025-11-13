@@ -35,7 +35,7 @@ export default class World {
 
         // Sistema de quesos
         this.cheeses = []
-        this.maxCheeses = 1 // TEMPORAL: Para pruebas - cambiar a 10 en producción
+        this.maxCheeses = 10 // TEMPORAL: Para pruebas - cambiar a 10 en producción
         this.cheesesCollected = 0
         this.cheeseModel = null
         this.cheeseParticles = null
