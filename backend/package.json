@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "seed:levels": "node src/scripts/seedLevels.js",
+    "seed:levels:docker": "docker exec backend-express npm run seed:levels"
   },
   "keywords": ["express", "mongodb", "jwt", "authentication"],
   "author": "",

@@ -118,6 +118,220 @@ GET /api/auth/me
 Authorization: Bearer <token>
 ```
 
+### Niveles del Juego
+
+#### Obtener todos los niveles
+```
+GET /api/levels
+```
+
+Respuesta:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "...",
+      "levelNumber": 1,
+      "coinsCount": 10,
+      "enemiesCount": 1,
+      "description": "Nivel 1: Ciudad Toy Car",
+      "isActive": true
+    }
+  ],
+  "count": 3
+}
+```
+
+#### Obtener configuración de un nivel específico
+```
+GET /api/levels/:levelId
+```
+
+Ejemplo: `GET /api/levels/1`
+
+Respuesta:
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "...",
+    "levelNumber": 1,
+    "coinsCount": 10,
+    "enemiesCount": 1,
+    "description": "Nivel 1: Ciudad Toy Car",
+    "isActive": true
+  }
+}
+```
+
+#### Obtener cantidad de coins de un nivel
+```
+GET /api/levels/:levelId/coins-count
+```
+
+Ejemplo: `GET /api/levels/1/coins-count`
+
+Respuesta:
+```json
+{
+  "success": true,
+  "levelNumber": 1,
+  "coinsCount": 10
+}
+```
+
+### Puntuaciones del Juego
+
+#### Guardar puntuación (Requiere autenticación)
+```
+POST /api/scores
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "totalPoints": 150,
+  "pointsByLevel": {
+    "level1": 50,
+    "level2": 60,
+    "level3": 40
+  },
+  "gameTime": 1200.5  // opcional, en segundos
+}
+```
+
+Respuesta:
+```json
+{
+  "success": true,
+  "message": "Puntuación guardada exitosamente",
+  "data": {
+    "_id": "...",
+    "user": {
+      "_id": "...",
+      "email": "usuario@example.com",
+      "name": "Nombre Usuario"
+    },
+    "totalPoints": 150,
+    "pointsByLevel": {
+      "level1": 50,
+      "level2": 60,
+      "level3": 40
+    },
+    "gameTime": 1200.5,
+    "completedAt": "2025-11-12T...",
+    "createdAt": "2025-11-12T...",
+    "updatedAt": "2025-11-12T..."
+  }
+}
+```
+
+#### Obtener ranking global
+```
+GET /api/scores?limit=10
+```
+
+Parámetros opcionales:
+- `limit`: Número de resultados (1-100, por defecto 10)
+
+Respuesta:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "...",
+      "user": {
+        "_id": "...",
+        "email": "usuario1@example.com",
+        "name": "Usuario 1"
+      },
+      "totalPoints": 200,
+      "pointsByLevel": {
+        "level1": 70,
+        "level2": 80,
+        "level3": 50
+      },
+      "completedAt": "2025-11-12T...",
+      "createdAt": "2025-11-12T..."
+    }
+  ],
+  "count": 10
+}
+```
+
+#### Obtener puntuaciones del usuario actual (Requiere autenticación)
+```
+GET /api/scores/me
+Authorization: Bearer <token>
+```
+
+Respuesta:
+```json
+{
+  "success": true,
+  "data": {
+    "scores": [
+      {
+        "_id": "...",
+        "totalPoints": 150,
+        "pointsByLevel": {
+          "level1": 50,
+          "level2": 60,
+          "level3": 40
+        },
+        "completedAt": "2025-11-12T...",
+        "createdAt": "2025-11-12T..."
+      }
+    ],
+    "bestScore": {
+      "_id": "...",
+      "totalPoints": 200,
+      "pointsByLevel": {
+        "level1": 70,
+        "level2": 80,
+        "level3": 50
+      },
+      "user": {
+        "_id": "...",
+        "email": "usuario@example.com",
+        "name": "Nombre Usuario"
+      }
+    },
+    "totalGames": 5
+  }
+}
+```
+
+#### Obtener mejor puntuación del usuario actual (Requiere autenticación)
+```
+GET /api/scores/best
+Authorization: Bearer <token>
+```
+
+Respuesta:
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "...",
+    "user": {
+      "_id": "...",
+      "email": "usuario@example.com",
+      "name": "Nombre Usuario"
+    },
+    "totalPoints": 200,
+    "pointsByLevel": {
+      "level1": 70,
+      "level2": 80,
+      "level3": 50
+    },
+    "completedAt": "2025-11-12T...",
+    "createdAt": "2025-11-12T..."
+  }
+}
+```
+
 ## 🔐 Autenticación
 
 El sistema utiliza JWT (JSON Web Tokens) para la autenticación. Después de hacer login o registro, recibirás un token que debes incluir en el header `Authorization` como `Bearer <token>` para acceder a rutas protegidas.
@@ -137,17 +351,23 @@ curl -H "Authorization: Bearer tu_token_aqui" http://localhost:3000/api/auth/me
 ## 📁 Estructura del Proyecto
 
 ```
-Bakcned-new/
+backend/
 ├── src/
 │   ├── config/
 │   │   └── database.js       # Configuración de MongoDB
 │   ├── models/
-│   │   └── User.js           # Modelo de Usuario
+│   │   ├── User.js           # Modelo de Usuario
+│   │   ├── Level.js          # Modelo de Niveles del Juego
+│   │   └── GameScore.js      # Modelo de Puntuaciones del Juego
 │   ├── middleware/
 │   │   └── auth.js           # Middleware de autenticación JWT
 │   ├── routes/
 │   │   ├── auth.routes.js    # Rutas de autenticación
+│   │   ├── levels.routes.js  # Rutas de niveles
+│   │   ├── scores.routes.js  # Rutas de puntuaciones
 │   │   └── index.js          # Rutas principales
+│   ├── scripts/
+│   │   └── seedLevels.js     # Script para poblar niveles iniciales
 │   └── server.js             # Archivo principal del servidor
 ├── docker-compose.yml         # Configuración de Docker
 ├── Dockerfile                # Imagen Docker
@@ -159,6 +379,9 @@ Bakcned-new/
 
 - `npm run dev`: Inicia el servidor en modo desarrollo con watch
 - `npm start`: Inicia el servidor en modo producción
+- `npm run seed:levels`: Pobla la base de datos con datos iniciales de niveles (ejecutar después de la primera instalación)
+  - **Si usas Docker:** Ejecuta desde dentro del contenedor: `docker exec backend-express npm run seed:levels`
+  - **Si NO usas Docker:** Ejecuta directamente: `npm run seed:levels` (asegúrate de que tu `.env` tenga `MONGODB_URI` con `localhost` como host)
 
 ## ⚠️ Notas Importantes
 

@@ -21,12 +21,20 @@ app.use('/api', routes);
 // Ruta raíz
 app.get('/', (req, res) => {
   res.json({
-    message: 'Bienvenido al API de autenticación',
+    message: 'Bienvenido al API del Juego 3D Multinivel',
+    version: '1.0.0',
     endpoints: {
-      health: '/api/health',
-      register: 'POST /api/auth/register',
-      login: 'POST /api/auth/login',
-      profile: 'GET /api/auth/me',
+      health: 'GET /api/health',
+      auth: {
+        register: 'POST /api/auth/register',
+        login: 'POST /api/auth/login',
+        profile: 'GET /api/auth/me',
+      },
+      levels: {
+        all: 'GET /api/levels',
+        byId: 'GET /api/levels/:levelId',
+        coinsCount: 'GET /api/levels/:levelId/coins-count',
+      },
     },
   });
 });
