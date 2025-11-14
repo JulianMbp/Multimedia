@@ -1,5 +1,6 @@
 import * as CANNON from 'cannon-es'
 import * as THREE from 'three'
+import { API_ENDPOINTS } from '../config/api.js'
 import { createBoxShapeFromModel, createTrimeshShapeFromModel } from '../Experience/Utils/PhysicsShapeFactory.js'
 import Prize from '../Experience/World/Prize.js'
 
@@ -104,8 +105,8 @@ export default class ToyCarLoader {
 
             // Intentar cargar desde la API primero
             try {
-                const apiUrl = import.meta.env.VITE_API_URL + '/api/blocks'
-                const res = await fetch(apiUrl)
+                // Usar la configuración centralizada de endpoints
+                const res = await fetch(API_ENDPOINTS.blocks)
 
                 if (res.ok) {
                     blocks = await res.json()

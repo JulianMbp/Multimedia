@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import Login from './components/Login';
 import LogoutButton from './components/LogoutButton';
 import Register from './components/Register';
+import LoadingScreen from './components/LoadingScreen';
 import { useAuth } from './context/AuthContext';
 import Experience from './Experience/Experience';
 
@@ -11,6 +12,8 @@ const App = () => {
   const experienceRef = useRef(null);
   const { isAuthenticated, loading } = useAuth();
   const [showRegister, setShowRegister] = useState(false);
+  const [experienceLoading, setExperienceLoading] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
 
 
   useEffect(() => {
@@ -27,12 +30,60 @@ const App = () => {
       const timer = setTimeout(() => {
         if (canvasRef.current && !experienceRef.current) {
           console.log('🎮 Inicializando Experience - Usuario autenticado');
+          setExperienceLoading(true);
+          setLoadingProgress(0);
+          
           try {
             experienceRef.current = new Experience(canvasRef.current);
             console.log('✅ Experience inicializado correctamente');
+            
+            // Escuchar el progreso de carga de recursos
+            if (experienceRef.current?.resources) {
+              const resources = experienceRef.current.resources;
+              
+              // Calcular progreso inicial
+              const updateProgress = (loaded, toLoad) => {
+                if (toLoad > 0) {
+                  const progress = (loaded / toLoad) * 100;
+                  setLoadingProgress(progress);
+                }
+              };
+              
+              // Escuchar cuando se carga un recurso (evento progress)
+              resources.on('progress', (...args) => {
+                const [loaded, toLoad] = args;
+                updateProgress(loaded, toLoad);
+              });
+              
+              // Escuchar cuando todos los recursos están listos
+              resources.on('ready', () => {
+                console.log('✅ Todos los recursos cargados');
+                setLoadingProgress(100);
+                // Pequeño delay para mostrar el 100% antes de ocultar
+                setTimeout(() => {
+                  setExperienceLoading(false);
+                }, 500);
+              });
+              
+              // Si ya están cargados, ocultar inmediatamente
+              if (resources.loaded === resources.toLoad) {
+                setLoadingProgress(100);
+                setTimeout(() => {
+                  setExperienceLoading(false);
+                }, 500);
+              } else {
+                updateProgress(resources.loaded, resources.toLoad);
+              }
+            } else {
+              // Si no hay recursos, ocultar después de un breve delay
+              setTimeout(() => {
+                setExperienceLoading(false);
+              }, 1000);
+            }
           } catch (error) {
             console.error('❌ Error al inicializar Experience:', error);
             experienceRef.current = null;
+            setExperienceLoading(false);
           }
         }
       }, 100);
@@ -43,6 +94,7 @@ const App = () => {
     // Si el usuario se desautentica, destruir el Experience
     if (!isAuthenticated && experienceRef.current) {
       console.log('🚪 Usuario desautenticado, limpiando Experience');
+      setExperienceLoading(false);
       // Limpiar el Experience si tiene método de destrucción
       if (experienceRef.current.destroy) {
         try {
@@ -87,6 +139,7 @@ const App = () => {
   // Si llegamos aquí, el usuario está autenticado
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
+      {experienceLoading && <LoadingScreen progress={loadingProgress} />}
       <LogoutButton />
       <canvas 
         ref={canvasRef} 
