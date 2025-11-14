@@ -1,9 +1,10 @@
 // src/App.jsx
 import { useEffect, useRef, useState } from 'react';
+import CameraToggleButton from './components/CameraToggleButton';
+import LoadingScreen from './components/LoadingScreen';
 import Login from './components/Login';
 import LogoutButton from './components/LogoutButton';
 import Register from './components/Register';
-import LoadingScreen from './components/LoadingScreen';
 import { useAuth } from './context/AuthContext';
 import Experience from './Experience/Experience';
 
@@ -14,6 +15,7 @@ const App = () => {
   const [showRegister, setShowRegister] = useState(false);
   const [experienceLoading, setExperienceLoading] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
+  const [experienceReady, setExperienceReady] = useState(false);
 
 
   useEffect(() => {
@@ -36,6 +38,7 @@ const App = () => {
           try {
             experienceRef.current = new Experience(canvasRef.current);
             console.log('✅ Experience inicializado correctamente');
+            setExperienceReady(true);
             
             // Escuchar el progreso de carga de recursos
             if (experienceRef.current?.resources) {
@@ -95,6 +98,7 @@ const App = () => {
     if (!isAuthenticated && experienceRef.current) {
       console.log('🚪 Usuario desautenticado, limpiando Experience');
       setExperienceLoading(false);
+      setExperienceReady(false);
       // Limpiar el Experience si tiene método de destrucción
       if (experienceRef.current.destroy) {
         try {
@@ -141,6 +145,7 @@ const App = () => {
     <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
       {experienceLoading && <LoadingScreen progress={loadingProgress} />}
       <LogoutButton />
+      {experienceReady && <CameraToggleButton experience={experienceRef.current} />}
       <canvas 
         ref={canvasRef} 
         className="webgl" 

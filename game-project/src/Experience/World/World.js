@@ -68,8 +68,8 @@ export default class World {
             console.log('✅ Ahora se pueden recoger premios')
         }, 2000)
 
-        // Cuando todo esté cargado...
-        this.resources.on('ready', async () => {
+        // Función para inicializar el mundo cuando los recursos estén listos
+        const initializeWorld = async () => {
             // 1️⃣ Mundo base
             this.floor = new Floor(this.experience)
             this.environment = new Environment(this.experience)
@@ -142,9 +142,17 @@ export default class World {
                 onLeft: (pressed) => { this.experience.keyboard.keys.left = pressed },
                 onRight: (pressed) => { this.experience.keyboard.keys.right = pressed }
             })
+        }
 
-
-        })
+        // Verificar si los recursos ya están cargados
+        if (this.resources.loaded === this.resources.toLoad && this.resources.toLoad > 0) {
+            // Si ya están cargados, inicializar inmediatamente
+            console.log('✅ Recursos ya cargados, inicializando mundo inmediatamente');
+            initializeWorld();
+        } else {
+            // Si no están cargados, esperar al evento 'ready'
+            this.resources.on('ready', initializeWorld);
+        }
 
     }
 
