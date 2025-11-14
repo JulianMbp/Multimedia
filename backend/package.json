@@ -8,7 +8,11 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "seed:levels": "node src/scripts/seedLevels.js",
-    "seed:levels:docker": "docker exec backend-express npm run seed:levels"
+    "seed:blocks": "node src/scripts/seedBlocks.js",
+    "seed:all": "npm run seed:levels && npm run seed:blocks",
+    "seed:levels:docker": "docker exec backend-express npm run seed:levels",
+    "seed:blocks:docker": "docker exec backend-express npm run seed:blocks",
+    "seed:all:docker": "docker exec backend-express npm run seed:all"
   },
   "keywords": ["express", "mongodb", "jwt", "authentication"],
   "author": "",

@@ -63,12 +63,29 @@ Esto iniciará:
 - MongoDB en el puerto 27017
 - El servidor Express en el puerto 3000
 
-4. Para ver los logs:
+4. **Inicializar la base de datos** (ejecutar después de iniciar los contenedores):
+```bash
+# Opción 1: Usando el script helper (recomendado)
+./scripts/init-database.sh
+
+# Opción 2: Ejecutando los comandos manualmente
+docker exec backend-express npm run seed:levels
+docker exec backend-express npm run seed:blocks
+
+# Opción 3: Ejecutar ambos seeds a la vez
+docker exec backend-express npm run seed:all
+```
+
+Esto creará las colecciones necesarias y los datos iniciales:
+- **Niveles**: 3 niveles del juego
+- **Bloques**: Todos los bloques del juego (edificios, vehículos, monedas) cargados desde el archivo JSON a MongoDB
+
+5. Para ver los logs:
 ```bash
 docker-compose logs -f
 ```
 
-5. Para detener los servicios:
+6. Para detener los servicios:
 ```bash
 docker-compose down
 ```
@@ -178,6 +195,63 @@ Respuesta:
   "success": true,
   "levelNumber": 1,
   "coinsCount": 10
+}
+```
+
+### Bloques del Juego
+
+#### Obtener todos los bloques
+```
+GET /api/blocks
+```
+
+Parámetros opcionales de consulta:
+- `level`: Filtrar por nivel (ej: `?level=1`)
+- `role`: Filtrar por rol (ej: `?role=building`)
+
+Ejemplo: `GET /api/blocks?level=1`
+
+Respuesta:
+```json
+[
+  {
+    "_id": "...",
+    "name": "building_003",
+    "x": 14.3581,
+    "y": 130.8988,
+    "z": -0.0088,
+    "Role": "building",
+    "level": 1,
+    "createdAt": "2025-11-14T00:00:00.000Z",
+    "updatedAt": "2025-11-14T00:00:00.000Z"
+  }
+]
+```
+
+#### Obtener bloques de un nivel específico
+```
+GET /api/blocks/:levelId
+```
+
+Ejemplo: `GET /api/blocks/1`
+
+Respuesta:
+```json
+{
+  "success": true,
+  "level": 1,
+  "count": 69,
+  "data": [
+    {
+      "_id": "...",
+      "name": "building_003",
+      "x": 14.3581,
+      "y": 130.8988,
+      "z": -0.0088,
+      "Role": "building",
+      "level": 1
+    }
+  ]
 }
 ```
 
